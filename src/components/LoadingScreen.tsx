@@ -1,9 +1,9 @@
-import { ExclamationTriangleIcon } from '@heroicons/react/24/outline'
+import { ArrowPathIcon, ExclamationTriangleIcon } from '@heroicons/react/24/outline'
 
 export function LoadingScreen() {
   return (
-    <div className="flex min-h-full flex-col items-center justify-center gap-3 bg-water-50">
-      <div className="h-10 w-10 animate-spin rounded-full border-4 border-water-100 border-t-water-500" />
+    <div className="fixed inset-0 z-30 flex flex-col items-center justify-center gap-3 bg-water-50">
+      <ArrowPathIcon className="h-9 w-9 animate-spin text-water-500" />
       <p className="text-sm text-slate-400">กำลังโหลด...</p>
     </div>
   )
@@ -11,7 +11,7 @@ export function LoadingScreen() {
 
 export function ErrorScreen({ message, onRetry }: { message: string; onRetry: () => void }) {
   return (
-    <div className="flex min-h-full flex-col items-center justify-center gap-3 bg-water-50 px-6 text-center">
+    <div className="fixed inset-0 z-30 flex flex-col items-center justify-center gap-3 bg-water-50 px-6 text-center">
       <ExclamationTriangleIcon className="h-10 w-10 text-coral-400" />
       <p className="text-sm font-medium text-slate-600">{message}</p>
       <button

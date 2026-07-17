@@ -67,13 +67,15 @@ export function WaveCircle({ percent, label, sublabel, size = 240 }: WaveCircleP
           }}
         />
 
-        {/* frosted chip keeps text readable at any water level, instead of swapping color */}
-        <div className="absolute inset-0 flex flex-col items-center justify-center">
-          <div className="flex flex-col items-center gap-0.5 rounded-3xl bg-white/75 px-5 py-3 backdrop-blur-sm">
-            <span className="font-display text-4xl font-semibold text-water-700">{Math.round(clamped)}%</span>
-            {label && <span className="text-sm font-medium text-slate-600">{label}</span>}
-            {sublabel && <span className="text-xs text-slate-400">{sublabel}</span>}
-          </div>
+        {/* Dark navy text stays readable on both the white and wave zones without
+            needing a background box — a soft light glow keeps it crisp at the seam. */}
+        <div
+          className="absolute inset-0 flex flex-col items-center justify-center gap-0.5"
+          style={{ textShadow: '0 1px 4px rgba(255,255,255,0.9)' }}
+        >
+          <span className="font-display text-4xl font-semibold text-water-700">{Math.round(clamped)}%</span>
+          {label && <span className="text-sm font-medium text-water-700">{label}</span>}
+          {sublabel && <span className="text-xs text-water-600">{sublabel}</span>}
         </div>
       </div>
     </div>

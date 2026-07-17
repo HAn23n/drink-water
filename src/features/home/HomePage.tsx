@@ -150,9 +150,9 @@ export function HomePage() {
       icon: <BottleIcon className="h-8 w-8 text-water-500" fillPercent={65} />,
     },
     {
-      key: 'jug',
-      label: 'เหยือกใหญ่',
-      amount: profile.bottle_size_ml * 2,
+      key: 'big-bottle',
+      label: 'ขวดใหญ่',
+      amount: 1400,
       icon: <BottleIcon className="h-8 w-8 text-water-600" fillPercent={90} />,
     },
   ]
@@ -174,12 +174,12 @@ export function HomePage() {
         sublabel={goalReached ? 'ดื่มเกินเป้าหมายก็ได้ ดื่มต่อได้เลย' : `เหลืออีก ${Math.max(profile.daily_goal_ml - totalMl, 0)} ml`}
       />
 
-      <div className="flex w-full max-w-sm gap-3 overflow-x-auto pb-1">
+      <div className="grid w-full max-w-sm grid-cols-3 gap-3">
         {quickAddOptions.map((opt) => (
           <button
             key={opt.key}
             onClick={() => handleAdd(opt.amount)}
-            className="flex min-w-[92px] flex-shrink-0 flex-col items-center gap-1 rounded-3xl bg-white px-3 py-4 text-sm font-medium text-water-700 shadow-md shadow-water-100 transition hover:-translate-y-0.5 hover:shadow-lg"
+            className="flex flex-col items-center gap-1 rounded-3xl bg-white px-2 py-4 text-sm font-medium text-water-700 shadow-md shadow-water-100 transition hover:-translate-y-0.5 hover:shadow-lg"
           >
             {opt.icon}
             {opt.label}
@@ -188,7 +188,7 @@ export function HomePage() {
         ))}
         <button
           onClick={() => setShowCustom((v) => !v)}
-          className="flex min-w-[92px] flex-shrink-0 flex-col items-center justify-center gap-1 rounded-3xl bg-white px-3 py-4 text-sm font-medium text-water-700 shadow-md shadow-water-100 transition hover:-translate-y-0.5 hover:shadow-lg"
+          className="flex flex-col items-center justify-center gap-1 rounded-3xl bg-white px-2 py-4 text-sm font-medium text-water-700 shadow-md shadow-water-100 transition hover:-translate-y-0.5 hover:shadow-lg"
         >
           <PlusIcon className="h-8 w-8 text-water-500" />
           กำหนดเอง
