@@ -1,10 +1,13 @@
 import { useEffect, useState } from 'react'
 import { Bar, BarChart, CartesianGrid, Cell, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
-import { FireIcon, CheckCircleIcon, ArrowTrendingUpIcon, TrophyIcon, SparklesIcon } from '@heroicons/react/24/solid'
+import { FireIcon, CheckCircleIcon, ArrowTrendingUpIcon, TrophyIcon, SparklesIcon, ShareIcon } from '@heroicons/react/24/solid'
 import { LoadingScreen, ErrorScreen } from '../../components/LoadingScreen'
+import { Calendar } from '../../components/Calendar'
+import { ChallengeCard } from './ChallengeCard'
 import { useAuth } from '../../lib/AuthContext'
 import { fetchProfile, updateProfile, type Profile } from '../../lib/profile'
 import { calculateStreak, fetchDailyTotals, type DailyTotal } from '../../lib/history'
+import { shareProgressCard } from '../../lib/shareCard'
 
 const RANGE_OPTIONS = [7, 14, 30] as const
 type RangeDays = (typeof RANGE_OPTIONS)[number]
@@ -26,6 +29,7 @@ export function HistoryPage() {
   const [rangeDays, setRangeDays] = useState<RangeDays>(7)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [sharing, setSharing] = useState(false)
 
   useEffect(() => {
     if (!user) return
@@ -78,6 +82,7 @@ export function HistoryPage() {
     null,
   )
   const longestStreak = Math.max(streak, profile.longest_streak_days)
+  const todayTotal = allTotals[allTotals.length - 1]
 
   const chartData = dailyTotals.map((d) => ({
     date: formatShortDate(d.date),
@@ -85,22 +90,50 @@ export function HistoryPage() {
     goalMet: d.goalMet,
   }))
 
+  async function handleShare() {
+    if (!profile || !todayTotal) return
+    setSharing(true)
+    try {
+      await shareProgressCard({
+        displayName: profile.display_name,
+        totalMl: todayTotal.totalMl,
+        goalMl: profile.daily_goal_ml,
+        percent: profile.daily_goal_ml > 0 ? (todayTotal.totalMl / profile.daily_goal_ml) * 100 : 0,
+        streak: longestStreak,
+      })
+    } catch {
+      // User cancelling the native share sheet also rejects — not a real error, ignore.
+    } finally {
+      setSharing(false)
+    }
+  }
+
   return (
     <div className="flex min-h-full flex-col gap-6 bg-water-50 px-6 py-10">
       {error && <p className="text-sm text-coral-500">{error}</p>}
 
-      <div className="flex gap-2">
-        {RANGE_OPTIONS.map((d) => (
-          <button
-            key={d}
-            onClick={() => setRangeDays(d)}
-            className={`rounded-full px-4 py-1.5 text-sm font-medium transition ${
-              rangeDays === d ? 'bg-water-500 text-white shadow-md shadow-water-500/30' : 'bg-white text-slate-500 shadow-sm hover:bg-water-50'
-            }`}
-          >
-            {d} วัน
-          </button>
-        ))}
+      <div className="flex items-center justify-between">
+        <div className="flex gap-2">
+          {RANGE_OPTIONS.map((d) => (
+            <button
+              key={d}
+              onClick={() => setRangeDays(d)}
+              className={`rounded-full px-4 py-1.5 text-sm font-medium transition ${
+                rangeDays === d ? 'bg-water-500 text-white shadow-md shadow-water-500/30' : 'bg-white text-slate-500 shadow-sm hover:bg-water-50'
+              }`}
+            >
+              {d} วัน
+            </button>
+          ))}
+        </div>
+        <button
+          onClick={handleShare}
+          disabled={sharing}
+          aria-label="แชร์ความคืบหน้า"
+          className="rounded-full bg-white p-2.5 text-water-600 shadow-sm transition hover:bg-water-50 disabled:opacity-50"
+        >
+          <ShareIcon className="h-4 w-4" />
+        </button>
       </div>
 
       <div className="grid grid-cols-2 gap-3">
@@ -145,6 +178,10 @@ export function HistoryPage() {
           })}
         </div>
       </div>
+
+      <ChallengeCard userId={user!.id} timezone={profile.timezone} dailyGoalMl={profile.daily_goal_ml} />
+
+      <Calendar userId={user!.id} timezone={profile.timezone} dailyGoalMl={profile.daily_goal_ml} />
 
       <div className="rounded-3xl bg-white p-4 shadow-md shadow-water-100">
         <h2 className="mb-3 text-sm font-medium text-slate-500">{rangeDays} วันล่าสุด</h2>

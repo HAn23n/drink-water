@@ -1,5 +1,11 @@
-import { describe, expect, it } from 'vitest'
-import { calculateBmi, calculateDailyGoalMl, getBmiCategory, logDateInTimeZone } from '../water'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import {
+  calculateBmi,
+  calculateDailyGoalMl,
+  getBmiCategory,
+  logDateInTimeZone,
+  yesterdayInTimeZone,
+} from '../water'
 
 describe('calculateDailyGoalMl', () => {
   it('applies the normal activity multiplier (1.0)', () => {
@@ -54,5 +60,20 @@ describe('logDateInTimeZone', () => {
     // 2026-07-17 23:30 UTC == 2026-07-18 06:30 Bangkok (UTC+7)
     const date = new Date('2026-07-17T23:30:00Z')
     expect(logDateInTimeZone(date, 'Asia/Bangkok')).toBe('2026-07-18')
+  })
+})
+
+describe('yesterdayInTimeZone', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('is one calendar day behind today', () => {
+    vi.setSystemTime(new Date('2026-07-17T13:00:00Z')) // 2026-07-17 20:00 Bangkok
+    expect(yesterdayInTimeZone('Asia/Bangkok')).toBe('2026-07-16')
   })
 })

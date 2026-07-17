@@ -17,6 +17,7 @@ export interface Profile {
   timezone: string
   onboarded: boolean
   longest_streak_days: number
+  created_at: string
 }
 
 export async function fetchProfile(userId: string): Promise<Profile> {

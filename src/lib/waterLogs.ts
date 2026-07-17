@@ -15,14 +15,17 @@ export async function addWaterLog(
   userId: string,
   amountMl: number,
   timezone: string,
+  /** Backdate to a specific "YYYY-MM-DD" (e.g. yesterday). Defaults to right now. */
+  targetDate?: string,
 ): Promise<void> {
-  const now = new Date()
+  // Noon avoids any DST/rounding ambiguity and reads as a sensible "logged around midday".
+  const loggedAt = targetDate ? new Date(`${targetDate}T12:00:00`) : new Date()
   const entry: QueuedWaterLog = {
     client_id: uuidv4(),
     user_id: userId,
     amount_ml: amountMl,
-    logged_at: now.toISOString(),
-    log_date: logDateInTimeZone(now, timezone),
+    logged_at: loggedAt.toISOString(),
+    log_date: targetDate ?? logDateInTimeZone(loggedAt, timezone),
   }
   // Always land in the local queue first so a dropped connection never loses the entry.
   await enqueue(entry)

@@ -1,6 +1,13 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { BellIcon, ArrowDownTrayIcon, ArrowRightOnRectangleIcon, SpeakerWaveIcon } from '@heroicons/react/24/outline'
+import {
+  BellIcon,
+  ArrowDownTrayIcon,
+  ArrowRightOnRectangleIcon,
+  SpeakerWaveIcon,
+  FireIcon,
+  CalendarDaysIcon,
+} from '@heroicons/react/24/outline'
 import { LoadingScreen, ErrorScreen } from '../../components/LoadingScreen'
 import { useAuth } from '../../lib/AuthContext'
 import { supabase } from '../../lib/supabase'
@@ -112,13 +119,33 @@ export function ProfilePage() {
 
   return (
     <div className="flex min-h-full flex-col items-center gap-4 bg-water-50 px-6 py-10">
-      <div className="flex w-full max-w-sm items-center gap-4 rounded-[28px] bg-white p-6 shadow-md shadow-water-100">
-        <div className="font-display flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-water-400 to-water-600 text-xl font-semibold text-white">
-          {initial}
+      <div className="w-full max-w-sm rounded-[28px] bg-white p-6 shadow-md shadow-water-100">
+        <div className="flex items-center gap-4">
+          <div className="font-display flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-water-400 to-water-600 text-xl font-semibold text-white">
+            {initial}
+          </div>
+          <div className="min-w-0">
+            <p className="font-display truncate text-lg font-semibold text-water-700">{profile.display_name || 'ผู้ใช้'}</p>
+            <p className="truncate text-xs text-slate-400">{user?.email}</p>
+          </div>
         </div>
-        <div className="min-w-0">
-          <p className="font-display truncate text-lg font-semibold text-water-700">{profile.display_name || 'ผู้ใช้'}</p>
-          <p className="truncate text-xs text-slate-400">{user?.email}</p>
+        <div className="mt-4 grid grid-cols-2 gap-3 border-t border-slate-100 pt-4">
+          <div className="flex items-center gap-2">
+            <FireIcon className="h-4 w-4 text-coral-500" />
+            <div>
+              <p className="font-display text-sm font-semibold text-water-700">{profile.longest_streak_days} วัน</p>
+              <p className="text-[11px] text-slate-400">สถิติดีที่สุด</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <CalendarDaysIcon className="h-4 w-4 text-water-500" />
+            <div>
+              <p className="font-display text-sm font-semibold text-water-700">
+                {new Date(profile.created_at).toLocaleDateString('th-TH', { month: 'short', year: 'numeric' })}
+              </p>
+              <p className="text-[11px] text-slate-400">สมาชิกตั้งแต่</p>
+            </div>
+          </div>
         </div>
       </div>
 

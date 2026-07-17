@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { PlusIcon, TrashIcon, ClockIcon } from '@heroicons/react/24/outline'
+import { PlusIcon, TrashIcon, ClockIcon, InformationCircleIcon } from '@heroicons/react/24/outline'
 import { CheckBadgeIcon } from '@heroicons/react/24/solid'
 import { LoadingScreen, ErrorScreen } from '../../components/LoadingScreen'
 import { ConfirmDialog } from '../../components/ConfirmDialog'
@@ -9,10 +9,16 @@ import { useAuth } from '../../lib/AuthContext'
 import { fetchProfile, type Profile } from '../../lib/profile'
 import { addWaterLog, deleteWaterLog, fetchLogsForDate, syncPendingLogs, type WaterLog } from '../../lib/waterLogs'
 import { removeFromQueue } from '../../lib/offlineQueue'
-import { todayInTimeZone } from '../../lib/water'
+import { todayInTimeZone, yesterdayInTimeZone } from '../../lib/water'
 import { playAddSound } from '../../lib/sound'
 import { celebrateGoalReached } from '../../lib/celebrate'
+import { getTipOfTheDay } from '../../lib/tips'
 import { WaveCircle } from '../../components/WaveCircle'
+import { PacingChecklist } from './PacingChecklist'
+import { DailySummaryModal } from './DailySummaryModal'
+import { AlcoholCard } from './AlcoholCard'
+
+type TargetDay = 'today' | 'yesterday'
 
 export function HomePage() {
   const { user } = useAuth()
@@ -25,6 +31,9 @@ export function HomePage() {
   const [customAmount, setCustomAmount] = useState('')
   const [showCustom, setShowCustom] = useState(false)
   const [pendingDelete, setPendingDelete] = useState<WaterLog | null>(null)
+  const [targetDay, setTargetDay] = useState<TargetDay>('today')
+  const [backdateNotice, setBackdateNotice] = useState<string | null>(null)
+  const [showSummary, setShowSummary] = useState(false)
   const celebratedRef = useRef(false)
 
   const reloadLogs = useCallback(async (userId: string, timezone: string) => {
@@ -99,9 +108,18 @@ export function HomePage() {
   async function handleAdd(amountMl: number) {
     if (!user || !profile || amountMl <= 0) return
     try {
-      await addWaterLog(user.id, amountMl, profile.timezone)
-      playAddSound()
-      await reloadLogs(user.id, profile.timezone)
+      if (targetDay === 'yesterday') {
+        const yesterday = yesterdayInTimeZone(profile.timezone)
+        await addWaterLog(user.id, amountMl, profile.timezone, yesterday)
+        playAddSound()
+        setBackdateNotice(`บันทึก ${amountMl} ml ลงเมื่อวานแล้ว`)
+        setTargetDay('today')
+        setTimeout(() => setBackdateNotice(null), 3000)
+      } else {
+        await addWaterLog(user.id, amountMl, profile.timezone)
+        playAddSound()
+        await reloadLogs(user.id, profile.timezone)
+      }
       setCustomAmount('')
       setShowCustom(false)
     } catch (err) {
@@ -158,8 +176,13 @@ export function HomePage() {
   ]
 
   return (
-    <div className="flex min-h-full flex-col items-center gap-8 bg-water-50 px-6 py-10">
+    <div className="flex min-h-full flex-col items-center gap-6 bg-water-50 px-6 py-10">
       {error && <p className="text-sm text-coral-500">{error}</p>}
+      {backdateNotice && (
+        <p className="w-full max-w-sm rounded-full bg-sun-300/40 px-4 py-2 text-center text-sm text-water-700">
+          {backdateNotice}
+        </p>
+      )}
 
       {goalReached && (
         <div className="flex w-full max-w-sm items-center justify-center gap-2 rounded-full bg-gradient-to-r from-coral-400 to-coral-500 px-4 py-2.5 text-center text-sm font-medium text-white shadow-lg shadow-coral-500/30">
@@ -168,11 +191,39 @@ export function HomePage() {
         </div>
       )}
 
-      <WaveCircle
-        percent={percent}
-        label={`${totalMl.toLocaleString()} / ${profile.daily_goal_ml.toLocaleString()} ml`}
-        sublabel={goalReached ? 'ดื่มเกินเป้าหมายก็ได้ ดื่มต่อได้เลย' : `เหลืออีก ${Math.max(profile.daily_goal_ml - totalMl, 0)} ml`}
-      />
+      <div className="relative">
+        <WaveCircle
+          percent={percent}
+          label={`${totalMl.toLocaleString()} / ${profile.daily_goal_ml.toLocaleString()} ml`}
+          sublabel={goalReached ? 'ดื่มเกินเป้าหมายก็ได้ ดื่มต่อได้เลย' : `เหลืออีก ${Math.max(profile.daily_goal_ml - totalMl, 0)} ml`}
+        />
+        <button
+          onClick={() => setShowSummary(true)}
+          aria-label="สรุปวันนี้"
+          className="absolute -right-2 -bottom-2 rounded-full bg-white p-2 text-water-500 shadow-md shadow-water-100 transition hover:bg-water-50"
+        >
+          <InformationCircleIcon className="h-5 w-5" />
+        </button>
+      </div>
+
+      <div className="flex w-full max-w-sm gap-2 self-center">
+        <button
+          onClick={() => setTargetDay('today')}
+          className={`flex-1 rounded-full py-1.5 text-xs font-medium transition ${
+            targetDay === 'today' ? 'bg-water-500 text-white' : 'bg-white text-slate-400 shadow-sm'
+          }`}
+        >
+          บันทึกวันนี้
+        </button>
+        <button
+          onClick={() => setTargetDay('yesterday')}
+          className={`flex-1 rounded-full py-1.5 text-xs font-medium transition ${
+            targetDay === 'yesterday' ? 'bg-water-500 text-white' : 'bg-white text-slate-400 shadow-sm'
+          }`}
+        >
+          บันทึกเมื่อวาน
+        </button>
+      </div>
 
       <div className="grid w-full max-w-sm grid-cols-3 gap-3">
         {quickAddOptions.map((opt) => (
@@ -253,6 +304,21 @@ export function HomePage() {
         )}
       </div>
 
+      <PacingChecklist
+        reminderStart={profile.reminder_start}
+        reminderEnd={profile.reminder_end}
+        dailyGoalMl={profile.daily_goal_ml}
+        totalMlSoFar={totalMl}
+      />
+
+      <AlcoholCard userId={user!.id} logDate={logDate ?? todayInTimeZone(profile.timezone)} />
+
+      {logDate && (
+        <p className="w-full max-w-sm rounded-2xl bg-water-100/60 p-3 text-center text-xs text-water-700">
+          💡 {getTipOfTheDay(logDate)}
+        </p>
+      )}
+
       <ConfirmDialog
         open={pendingDelete !== null}
         title="ลบรายการนี้?"
@@ -260,6 +326,15 @@ export function HomePage() {
         confirmLabel="ลบ"
         onConfirm={handleConfirmDelete}
         onCancel={() => setPendingDelete(null)}
+      />
+
+      <DailySummaryModal
+        open={showSummary}
+        onClose={() => setShowSummary(false)}
+        totalMl={totalMl}
+        goalMl={profile.daily_goal_ml}
+        reminderStart={profile.reminder_start}
+        reminderEnd={profile.reminder_end}
       />
     </div>
   )

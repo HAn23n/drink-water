@@ -43,3 +43,9 @@ export function todayInTimeZone(timeZone: string): string {
 export function logDateInTimeZone(date: Date, timeZone: string): string {
   return new Intl.DateTimeFormat('en-CA', { timeZone }).format(date)
 }
+
+export function yesterdayInTimeZone(timeZone: string): string {
+  const yesterday = new Date()
+  yesterday.setUTCDate(yesterday.getUTCDate() - 1)
+  return logDateInTimeZone(yesterday, timeZone)
+}
