@@ -32,20 +32,26 @@ supabase secrets set CRON_SECRET=<any long random string you generate yourself>
 `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are provided automatically to
 Edge Functions — no need to set them yourself.
 
-## 3. Deploy the Edge Function
+## 3. Deploy the Edge Function(s)
 
 ```bash
 supabase functions deploy send-water-reminders --no-verify-jwt
+supabase functions deploy send-daily-summary --no-verify-jwt
 ```
 
-`--no-verify-jwt` is required because pg_cron calls this function with your
-own `CRON_SECRET`, not a Supabase user JWT — the function checks that secret
-itself (see `supabase/functions/send-water-reminders/index.ts`).
+`--no-verify-jwt` is required because pg_cron calls these functions with your
+own `CRON_SECRET`, not a Supabase user JWT — each function checks that secret
+itself (see `supabase/functions/*/index.ts`).
+
+`send-daily-summary` is optional — only needed if you want the end-of-day
+summary push toggle in Profile to actually send anything. It reuses the same
+VAPID/CRON_SECRET secrets from step 2.
 
 ## 4. Run the migrations
 
-Run `supabase/migrations/0001_init.sql` and `0002_push_reminders.sql` in the
-Supabase SQL editor (or `supabase db push`). Before running `0002`, replace:
+Run every file in `supabase/migrations/` in order, in the Supabase SQL editor
+(or `supabase db push`). Before running `0002_push_reminders.sql` and
+`0005_daily_summary.sql`, replace:
 
 - `<PROJECT_REF>` with your project ref (the subdomain in your Supabase URL)
 - `<CRON_SECRET>` with the same value you set as the `CRON_SECRET` secret

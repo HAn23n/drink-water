@@ -18,6 +18,8 @@ export interface Profile {
   onboarded: boolean
   longest_streak_days: number
   created_at: string
+  daily_summary_enabled: boolean
+  last_daily_summary_sent_date: string | null
 }
 
 export async function fetchProfile(userId: string): Promise<Profile> {
