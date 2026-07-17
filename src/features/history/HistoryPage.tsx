@@ -82,7 +82,7 @@ export function HistoryPage() {
             <XAxis dataKey="date" tick={{ fontSize: 12, fill: '#64748b' }} axisLine={false} tickLine={false} />
             <YAxis tick={{ fontSize: 12, fill: '#64748b' }} axisLine={false} tickLine={false} />
             <ReferenceLine y={profile.daily_goal_ml} stroke="#0369a1" strokeDasharray="4 4" />
-            <Tooltip formatter={(value: number) => [`${value.toLocaleString()} ml`, 'ดื่มแล้ว']} />
+            <Tooltip formatter={(value) => [`${Number(value).toLocaleString()} ml`, 'ดื่มแล้ว']} />
             <Bar dataKey="ml" radius={[6, 6, 0, 0]}>
               {chartData.map((entry) => (
                 <Cell key={entry.date} fill={entry.goalMet ? '#0ea5e9' : '#bae6fd'} />
