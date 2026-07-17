@@ -1,0 +1,23 @@
+@import "tailwindcss";
+
+@theme {
+  --color-water-50: #f0f9ff;
+  --color-water-100: #e0f2fe;
+  --color-water-400: #38bdf8;
+  --color-water-500: #0ea5e9;
+  --color-water-600: #0284c7;
+  --color-water-700: #0369a1;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--color-water-50);
+  font-family: system-ui, 'Segoe UI', Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
