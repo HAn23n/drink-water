@@ -1,8 +1,19 @@
 import { useEffect, useState } from 'react'
 import { Bar, BarChart, CartesianGrid, Cell, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
+import { FireIcon, CheckCircleIcon, ArrowTrendingUpIcon, TrophyIcon, SparklesIcon } from '@heroicons/react/24/solid'
+import { LoadingScreen, ErrorScreen } from '../../components/LoadingScreen'
 import { useAuth } from '../../lib/AuthContext'
-import { fetchProfile, type Profile } from '../../lib/profile'
+import { fetchProfile, updateProfile, type Profile } from '../../lib/profile'
 import { calculateStreak, fetchDailyTotals, type DailyTotal } from '../../lib/history'
+
+const RANGE_OPTIONS = [7, 14, 30] as const
+type RangeDays = (typeof RANGE_OPTIONS)[number]
+
+const BADGE_TIERS = [
+  { days: 7, label: '7 วัน', Icon: FireIcon, color: 'text-coral-500', bg: 'bg-coral-100' },
+  { days: 30, label: '30 วัน', Icon: TrophyIcon, color: 'text-sun-400', bg: 'bg-sun-300/40' },
+  { days: 100, label: '100 วัน', Icon: SparklesIcon, color: 'text-water-600', bg: 'bg-water-100' },
+]
 
 function formatShortDate(isoDate: string) {
   return new Date(`${isoDate}T00:00:00`).toLocaleDateString('th-TH', { day: 'numeric', month: 'short' })
@@ -11,7 +22,8 @@ function formatShortDate(isoDate: string) {
 export function HistoryPage() {
   const { user } = useAuth()
   const [profile, setProfile] = useState<Profile | null>(null)
-  const [dailyTotals, setDailyTotals] = useState<DailyTotal[]>([])
+  const [allTotals, setAllTotals] = useState<DailyTotal[]>([])
+  const [rangeDays, setRangeDays] = useState<RangeDays>(7)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -24,8 +36,10 @@ export function HistoryPage() {
         const loadedProfile = await fetchProfile(user!.id)
         if (cancelled) return
         setProfile(loadedProfile)
-        const totals = await fetchDailyTotals(user!.id, loadedProfile.timezone, loadedProfile.daily_goal_ml, 7)
-        if (!cancelled) setDailyTotals(totals)
+        // Always fetch enough history to evaluate the longest badge tier,
+        // then slice down to whatever range the user has selected to view.
+        const totals = await fetchDailyTotals(user!.id, loadedProfile.timezone, loadedProfile.daily_goal_ml, 100)
+        if (!cancelled) setAllTotals(totals)
       } catch (err) {
         if (!cancelled) setError(err instanceof Error ? err.message : 'โหลดข้อมูลไม่สำเร็จ')
       } finally {
@@ -39,15 +53,31 @@ export function HistoryPage() {
     }
   }, [user])
 
-  if (loading || !profile) {
-    return <div className="flex min-h-full items-center justify-center text-slate-400">กำลังโหลด...</div>
+  const streak = calculateStreak(allTotals)
+
+  // Persist a new personal-best streak so badges stay unlocked after it later breaks.
+  useEffect(() => {
+    if (!user || !profile) return
+    if (streak > profile.longest_streak_days) {
+      updateProfile(user.id, { longest_streak_days: streak }).then(setProfile).catch(() => {})
+    }
+  }, [user, profile, streak])
+
+  if (loading) return <LoadingScreen />
+  if (!profile) {
+    return <ErrorScreen message={error ?? 'โหลดข้อมูลไม่สำเร็จ'} onRetry={() => window.location.reload()} />
   }
 
-  const streak = calculateStreak(dailyTotals)
+  const dailyTotals = allTotals.slice(-rangeDays)
   const daysMet = dailyTotals.filter((d) => d.goalMet).length
   const avgMl = dailyTotals.length
     ? Math.round(dailyTotals.reduce((sum, d) => sum + d.totalMl, 0) / dailyTotals.length)
     : 0
+  const bestDay = dailyTotals.reduce<DailyTotal | null>(
+    (best, d) => (!best || d.totalMl > best.totalMl ? d : best),
+    null,
+  )
+  const longestStreak = Math.max(streak, profile.longest_streak_days)
 
   const chartData = dailyTotals.map((d) => ({
     date: formatShortDate(d.date),
@@ -56,36 +86,78 @@ export function HistoryPage() {
   }))
 
   return (
-    <div className="flex min-h-full flex-col gap-6 bg-water-50 px-6 py-8">
-      {error && <p className="text-sm text-red-500">{error}</p>}
+    <div className="flex min-h-full flex-col gap-6 bg-water-50 px-6 py-10">
+      {error && <p className="text-sm text-coral-500">{error}</p>}
 
-      <div className="grid grid-cols-3 gap-3">
-        <div className="rounded-xl bg-white p-4 text-center shadow-sm">
-          <p className="text-2xl font-bold text-water-600">{streak}</p>
+      <div className="flex gap-2">
+        {RANGE_OPTIONS.map((d) => (
+          <button
+            key={d}
+            onClick={() => setRangeDays(d)}
+            className={`rounded-full px-4 py-1.5 text-sm font-medium transition ${
+              rangeDays === d ? 'bg-water-500 text-white shadow-md shadow-water-500/30' : 'bg-white text-slate-500 shadow-sm hover:bg-water-50'
+            }`}
+          >
+            {d} วัน
+          </button>
+        ))}
+      </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        <div className="flex flex-col items-center gap-1 rounded-3xl bg-white p-4 text-center shadow-md shadow-water-100">
+          <FireIcon className="h-5 w-5 text-coral-500" />
+          <p className="font-display text-2xl font-semibold text-water-700">{streak}</p>
           <p className="text-xs text-slate-400">วันติดต่อกัน</p>
         </div>
-        <div className="rounded-xl bg-white p-4 text-center shadow-sm">
-          <p className="text-2xl font-bold text-water-600">{daysMet}/7</p>
+        <div className="flex flex-col items-center gap-1 rounded-3xl bg-white p-4 text-center shadow-md shadow-water-100">
+          <CheckCircleIcon className="h-5 w-5 text-water-500" />
+          <p className="font-display text-2xl font-semibold text-water-700">
+            {daysMet}/{rangeDays}
+          </p>
           <p className="text-xs text-slate-400">วันที่ครบเป้า</p>
         </div>
-        <div className="rounded-xl bg-white p-4 text-center shadow-sm">
-          <p className="text-2xl font-bold text-water-600">{avgMl.toLocaleString()}</p>
+        <div className="flex flex-col items-center gap-1 rounded-3xl bg-white p-4 text-center shadow-md shadow-water-100">
+          <ArrowTrendingUpIcon className="h-5 w-5 text-sun-400" />
+          <p className="font-display text-2xl font-semibold text-water-700">{avgMl.toLocaleString()}</p>
           <p className="text-xs text-slate-400">เฉลี่ย ml/วัน</p>
+        </div>
+        <div className="flex flex-col items-center gap-1 rounded-3xl bg-white p-4 text-center shadow-md shadow-water-100">
+          <TrophyIcon className="h-5 w-5 text-coral-400" />
+          <p className="font-display text-2xl font-semibold text-water-700">{(bestDay?.totalMl ?? 0).toLocaleString()}</p>
+          <p className="text-xs text-slate-400">วันที่ดื่มมากสุด</p>
         </div>
       </div>
 
-      <div className="rounded-xl bg-white p-4 shadow-sm">
-        <h2 className="mb-3 text-sm font-medium text-slate-500">7 วันล่าสุด</h2>
+      <div className="rounded-3xl bg-white p-4 shadow-md shadow-water-100">
+        <h2 className="mb-3 text-sm font-medium text-slate-500">เหรียญสะสม</h2>
+        <div className="flex gap-3">
+          {BADGE_TIERS.map((tier) => {
+            const unlocked = longestStreak >= tier.days
+            return (
+              <div
+                key={tier.days}
+                className={`flex flex-1 flex-col items-center gap-1 rounded-2xl py-3 ${unlocked ? tier.bg : 'bg-slate-50'}`}
+              >
+                <tier.Icon className={`h-6 w-6 ${unlocked ? tier.color : 'text-slate-300'}`} />
+                <span className={`text-xs font-medium ${unlocked ? 'text-slate-700' : 'text-slate-300'}`}>{tier.label}</span>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+
+      <div className="rounded-3xl bg-white p-4 shadow-md shadow-water-100">
+        <h2 className="mb-3 text-sm font-medium text-slate-500">{rangeDays} วันล่าสุด</h2>
         <ResponsiveContainer width="100%" height={220}>
           <BarChart data={chartData} margin={{ top: 4, right: 8, left: -16, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e4e7" />
-            <XAxis dataKey="date" tick={{ fontSize: 12, fill: '#64748b' }} axisLine={false} tickLine={false} />
+            <XAxis dataKey="date" tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} interval="preserveStartEnd" />
             <YAxis tick={{ fontSize: 12, fill: '#64748b' }} axisLine={false} tickLine={false} />
-            <ReferenceLine y={profile.daily_goal_ml} stroke="#0369a1" strokeDasharray="4 4" />
+            <ReferenceLine y={profile.daily_goal_ml} stroke="#0b4f73" strokeDasharray="4 4" />
             <Tooltip formatter={(value) => [`${Number(value).toLocaleString()} ml`, 'ดื่มแล้ว']} />
-            <Bar dataKey="ml" radius={[6, 6, 0, 0]}>
+            <Bar dataKey="ml" radius={[8, 8, 0, 0]}>
               {chartData.map((entry) => (
-                <Cell key={entry.date} fill={entry.goalMet ? '#0ea5e9' : '#bae6fd'} />
+                <Cell key={entry.date} fill={entry.goalMet ? '#17b4e0' : '#cfeef9'} />
               ))}
             </Bar>
           </BarChart>

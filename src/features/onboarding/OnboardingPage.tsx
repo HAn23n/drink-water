@@ -2,14 +2,7 @@ import { useState, type FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../lib/AuthContext'
 import { updateProfile } from '../../lib/profile'
-import { calculateDailyGoalMl, type ActivityLevel } from '../../lib/water'
-
-const ACTIVITY_OPTIONS: { value: ActivityLevel; label: string }[] = [
-  { value: 'sedentary', label: 'เบา (นั่งทำงาน ไม่ค่อยขยับตัว)' },
-  { value: 'normal', label: 'ปกติ' },
-  { value: 'active', label: 'ออกกำลังกายสม่ำเสมอ' },
-  { value: 'very_active', label: 'ออกกำลังกายหนัก/ใช้แรงงานหนัก' },
-]
+import { ACTIVITY_OPTIONS, calculateDailyGoalMl, type ActivityLevel } from '../../lib/water'
 
 export function OnboardingPage() {
   const { user } = useAuth()
@@ -51,8 +44,8 @@ export function OnboardingPage() {
 
   return (
     <div className="flex min-h-full flex-col items-center bg-water-50 px-6 py-10">
-      <div className="w-full max-w-md rounded-2xl bg-white p-8 shadow-lg shadow-water-100">
-        <h1 className="mb-1 text-xl font-semibold text-water-700">มาตั้งเป้าหมายกันก่อน</h1>
+      <div className="w-full max-w-md rounded-[28px] bg-white p-8 shadow-[0_30px_60px_-24px_rgba(11,79,115,0.3)]">
+        <h1 className="font-display mb-1 text-xl font-semibold text-water-700">มาตั้งเป้าหมายกันก่อน</h1>
         <p className="mb-6 text-sm text-slate-500">กรอกข้อมูลเพื่อคำนวณปริมาณน้ำที่ควรดื่มต่อวัน</p>
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
@@ -62,12 +55,12 @@ export function OnboardingPage() {
               required
               value={displayName}
               onChange={(e) => setDisplayName(e.target.value)}
-              className="rounded-lg border border-slate-200 px-4 py-2 outline-none focus:border-water-500"
+              className="rounded-2xl border border-slate-200 px-4 py-2.5 outline-none transition focus:border-water-500 focus:ring-4 focus:ring-water-100"
             />
           </label>
 
           <div className="flex gap-3">
-            <label className="flex flex-1 flex-col gap-1 text-sm text-slate-600">
+            <label className="flex min-w-0 flex-1 flex-col gap-1 text-sm text-slate-600">
               น้ำหนัก (kg)
               <input
                 type="number"
@@ -76,10 +69,10 @@ export function OnboardingPage() {
                 max={300}
                 value={weightKg}
                 onChange={(e) => setWeightKg(Number(e.target.value))}
-                className="rounded-lg border border-slate-200 px-4 py-2 outline-none focus:border-water-500"
+                className="w-full min-w-0 rounded-2xl border border-slate-200 px-4 py-2.5 outline-none transition focus:border-water-500 focus:ring-4 focus:ring-water-100"
               />
             </label>
-            <label className="flex flex-1 flex-col gap-1 text-sm text-slate-600">
+            <label className="flex min-w-0 flex-1 flex-col gap-1 text-sm text-slate-600">
               ส่วนสูง (cm)
               <input
                 type="number"
@@ -88,7 +81,7 @@ export function OnboardingPage() {
                 max={250}
                 value={heightCm}
                 onChange={(e) => setHeightCm(Number(e.target.value))}
-                className="rounded-lg border border-slate-200 px-4 py-2 outline-none focus:border-water-500"
+                className="w-full min-w-0 rounded-2xl border border-slate-200 px-4 py-2.5 outline-none transition focus:border-water-500 focus:ring-4 focus:ring-water-100"
               />
             </label>
           </div>
@@ -98,7 +91,7 @@ export function OnboardingPage() {
             <select
               value={activityLevel}
               onChange={(e) => setActivityLevel(e.target.value as ActivityLevel)}
-              className="rounded-lg border border-slate-200 px-4 py-2 outline-none focus:border-water-500"
+              className="rounded-2xl border border-slate-200 px-4 py-2.5 outline-none transition focus:border-water-500 focus:ring-4 focus:ring-water-100"
             >
               {ACTIVITY_OPTIONS.map((opt) => (
                 <option key={opt.value} value={opt.value}>
@@ -108,7 +101,7 @@ export function OnboardingPage() {
             </select>
           </label>
 
-          <div className="rounded-lg bg-water-50 p-4 text-center">
+          <div className="rounded-2xl bg-water-50 p-4 text-center">
             <p className="text-sm text-slate-500">เป้าหมายน้ำต่อวัน</p>
             <div className="flex items-center justify-center gap-2">
               <input
@@ -117,7 +110,7 @@ export function OnboardingPage() {
                 max={10000}
                 value={goal}
                 onChange={(e) => setGoalOverride(Number(e.target.value))}
-                className="w-28 rounded-lg border border-slate-200 bg-white px-3 py-1 text-center text-lg font-semibold text-water-700 outline-none focus:border-water-500"
+                className="font-display w-28 rounded-xl border border-slate-200 bg-white px-3 py-1 text-center text-lg font-semibold text-water-700 outline-none focus:border-water-500"
               />
               <span className="text-slate-500">ml</span>
             </div>
@@ -132,12 +125,12 @@ export function OnboardingPage() {
             )}
           </div>
 
-          {error && <p className="text-sm text-red-500">{error}</p>}
+          {error && <p className="text-sm text-coral-500">{error}</p>}
 
           <button
             type="submit"
             disabled={saving}
-            className="mt-1 rounded-lg bg-water-500 py-2 font-medium text-white transition hover:bg-water-600 disabled:opacity-50"
+            className="mt-1 rounded-full bg-gradient-to-r from-water-500 to-water-600 py-3 font-medium text-white shadow-lg shadow-water-500/30 transition hover:-translate-y-0.5 hover:shadow-xl disabled:translate-y-0 disabled:opacity-50 disabled:shadow-none"
           >
             {saving ? 'กำลังบันทึก...' : 'เริ่มใช้งาน'}
           </button>

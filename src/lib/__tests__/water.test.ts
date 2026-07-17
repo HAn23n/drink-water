@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { calculateBmi, calculateDailyGoalMl, logDateInTimeZone } from '../water'
+import { calculateBmi, calculateDailyGoalMl, getBmiCategory, logDateInTimeZone } from '../water'
 
 describe('calculateDailyGoalMl', () => {
   it('applies the normal activity multiplier (1.0)', () => {
@@ -22,6 +22,24 @@ describe('calculateDailyGoalMl', () => {
 describe('calculateBmi', () => {
   it('computes weight over height-in-meters squared', () => {
     expect(calculateBmi(70, 175)).toBe(22.9)
+  })
+})
+
+describe('getBmiCategory', () => {
+  it('flags below 18.5 as underweight', () => {
+    expect(getBmiCategory(18.4).label).toBe('น้ำหนักน้อย')
+  })
+
+  it('flags 18.5-22.9 as normal', () => {
+    expect(getBmiCategory(22.9).tone).toBe('good')
+  })
+
+  it('flags 23-24.9 as overweight (Asian BMI cutoff)', () => {
+    expect(getBmiCategory(23).label).toBe('น้ำหนักเกิน')
+  })
+
+  it('flags 25 and above as obese', () => {
+    expect(getBmiCategory(25).tone).toBe('alert')
   })
 })
 

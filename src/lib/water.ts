@@ -9,6 +9,23 @@ const ACTIVITY_MULTIPLIER: Record<ActivityLevel, number> = {
   very_active: 1.3,
 }
 
+export const ACTIVITY_OPTIONS: { value: ActivityLevel; label: string }[] = [
+  { value: 'sedentary', label: 'ไม่ค่อยออกกำลังกาย (นั่งทำงานทั้งวัน)' },
+  { value: 'normal', label: 'ขยับตัวทั่วไป (เดิน/ทำงานบ้านบ้าง)' },
+  { value: 'active', label: 'ออกกำลังกาย 3-5 วัน/สัปดาห์' },
+  { value: 'very_active', label: 'ออกกำลังกายหนักแทบทุกวัน/ใช้แรงงานหนัก' },
+]
+
+export type BmiTone = 'low' | 'good' | 'warn' | 'alert'
+
+export function getBmiCategory(bmi: number): { label: string; tone: BmiTone } {
+  if (bmi < 18.5) return { label: 'น้ำหนักน้อย', tone: 'low' }
+  if (bmi < 23) return { label: 'น้ำหนักปกติ', tone: 'good' }
+  if (bmi < 25) return { label: 'น้ำหนักเกิน', tone: 'warn' }
+  if (bmi < 30) return { label: 'อ้วนระดับ 1', tone: 'alert' }
+  return { label: 'อ้วนระดับ 2', tone: 'alert' }
+}
+
 export function calculateDailyGoalMl(weightKg: number, activityLevel: ActivityLevel): number {
   return Math.round(weightKg * ML_PER_KG * ACTIVITY_MULTIPLIER[activityLevel])
 }
