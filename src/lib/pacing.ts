@@ -53,8 +53,11 @@ export interface PacingSlot {
   done: boolean
 }
 
-/** Splits the reminder window into `slotCount` even checkpoints for a simple
- *  "did I keep pace" checklist. Each slot is "done" once logged total reaches it. */
+/** Splits the reminder window into `slotCount` even-time checkpoints for a simple
+ *  "did I keep pace" checklist. Checkpoints already cleared by the original even
+ *  split stay fixed; any not-yet-cleared checkpoints are re-planned, spreading
+ *  whatever's left of the daily goal evenly across whatever's left of the slots —
+ *  so falling behind raises the remaining targets, and getting ahead lowers them. */
 export function buildPacingSlots(
   reminderStart: string,
   reminderEnd: string,
@@ -67,13 +70,27 @@ export function buildPacingSlots(
   const wraps = endM <= startM
   const windowMin = wraps ? 24 * 60 - startM + endM : endM - startM
 
+  const times = Array.from({ length: slotCount }, (_, i) =>
+    fromMinutes(startM + Math.round((windowMin * (i + 1)) / slotCount)),
+  )
+
+  let doneCount = 0
+  for (let i = 1; i <= slotCount; i++) {
+    if (Math.round((dailyGoalMl * i) / slotCount) <= totalMlSoFar) doneCount = i
+    else break
+  }
+  const remainingCount = slotCount - doneCount
+  const remainingGoal = dailyGoalMl - totalMlSoFar
+
   const slots: PacingSlot[] = []
   for (let i = 1; i <= slotCount; i++) {
-    const atMin = startM + Math.round((windowMin * i) / slotCount)
-    const targetMl = Math.round((dailyGoalMl * i) / slotCount)
+    const targetMl =
+      i <= doneCount
+        ? Math.round((dailyGoalMl * i) / slotCount)
+        : Math.round(totalMlSoFar + (remainingGoal * (i - doneCount)) / remainingCount)
     slots.push({
       label: `แก้วที่ ${i}`,
-      time: fromMinutes(atMin),
+      time: times[i - 1],
       targetMl,
       done: totalMlSoFar >= targetMl,
     })

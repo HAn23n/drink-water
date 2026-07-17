@@ -45,4 +45,23 @@ describe('buildPacingSlots', () => {
     const slots = buildPacingSlots('08:00', '22:00', 2000, 4, 0)
     expect(slots.every((s) => !s.done)).toBe(true)
   })
+
+  it('raises remaining targets when behind the even pace', () => {
+    // Even split would be 500/1000/1500/2000 — only 300ml logged, behind slot 1.
+    const slots = buildPacingSlots('08:00', '22:00', 2000, 4, 300)
+    expect(slots.every((s) => !s.done)).toBe(true)
+    expect(slots.map((s) => s.targetMl)).toEqual([725, 1150, 1575, 2000])
+  })
+
+  it('lowers remaining targets when ahead of the even pace', () => {
+    // 1200ml already logged clears slots 1-2 (500, 1000); remaining 800ml splits over slots 3-4.
+    const slots = buildPacingSlots('08:00', '22:00', 2000, 4, 1200)
+    expect(slots.map((s) => s.done)).toEqual([true, true, false, false])
+    expect(slots.map((s) => s.targetMl)).toEqual([500, 1000, 1600, 2000])
+  })
+
+  it('the last slot always targets the full daily goal', () => {
+    const slots = buildPacingSlots('08:00', '22:00', 2697, 4, 2150)
+    expect(slots[3].targetMl).toBe(2697)
+  })
 })

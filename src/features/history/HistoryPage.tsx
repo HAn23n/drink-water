@@ -181,9 +181,11 @@ export function HistoryPage() {
 
       <ChallengeCard userId={user!.id} timezone={profile.timezone} dailyGoalMl={profile.daily_goal_ml} />
 
-      <Calendar userId={user!.id} timezone={profile.timezone} dailyGoalMl={profile.daily_goal_ml} />
-
       <div className="rounded-3xl bg-white p-4 shadow-md shadow-water-100">
+        <Calendar userId={user!.id} timezone={profile.timezone} dailyGoalMl={profile.daily_goal_ml} />
+
+        <div className="my-4 border-t border-slate-100" />
+
         <h2 className="mb-3 text-sm font-medium text-slate-500">{rangeDays} วันล่าสุด</h2>
         <ResponsiveContainer width="100%" height={220}>
           <BarChart data={chartData} margin={{ top: 4, right: 8, left: -16, bottom: 0 }}>

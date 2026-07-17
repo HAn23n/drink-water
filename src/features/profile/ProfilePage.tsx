@@ -7,15 +7,21 @@ import {
   SpeakerWaveIcon,
   FireIcon,
   CalendarDaysIcon,
+  ScaleIcon,
+  ArrowsUpDownIcon,
 } from '@heroicons/react/24/outline'
 import { LoadingScreen, ErrorScreen } from '../../components/LoadingScreen'
+import { BmiGauge } from '../../components/BmiGauge'
+import { Select } from '../../components/Select'
+import { CocktailIcon } from '../../components/DrinkIcons'
 import { useAuth } from '../../lib/AuthContext'
 import { supabase } from '../../lib/supabase'
 import { fetchProfile, updateProfile, type Profile } from '../../lib/profile'
-import { ACTIVITY_OPTIONS, calculateBmi, calculateDailyGoalMl, getBmiCategory, type ActivityLevel } from '../../lib/water'
+import { ACTIVITY_OPTIONS, calculateBmi, calculateDailyGoalMl, getBmiCategory } from '../../lib/water'
 import { requestNotificationPermission, subscribeToPush, unsubscribeFromPush } from '../../lib/notifications'
 import { useInstallPrompt } from '../../lib/useInstallPrompt'
 import { isSoundEnabled, setSoundEnabled } from '../../lib/sound'
+import { isAlcoholTrackingEnabled, setAlcoholTrackingEnabled } from '../../lib/alcoholPref'
 
 const BMI_TONE_CLASSES: Record<string, string> = {
   low: 'bg-sun-300/40 text-water-700',
@@ -34,9 +40,11 @@ export function ProfilePage() {
   const [error, setError] = useState<string | null>(null)
   const [saved, setSaved] = useState(false)
   const [soundOn, setSoundOn] = useState(true)
+  const [alcoholTrackingOn, setAlcoholTrackingOn] = useState(false)
 
   useEffect(() => {
     setSoundOn(isSoundEnabled())
+    setAlcoholTrackingOn(isAlcoholTrackingEnabled())
   }, [])
 
   useEffect(() => {
@@ -98,6 +106,28 @@ export function ProfilePage() {
   function handleSoundToggle(enabled: boolean) {
     setSoundEnabled(enabled)
     setSoundOn(enabled)
+  }
+
+  function handleAlcoholTrackingToggle(enabled: boolean) {
+    setAlcoholTrackingEnabled(enabled)
+    setAlcoholTrackingOn(enabled)
+  }
+
+  async function handleDailySummaryToggle(enabled: boolean) {
+    if (!user || !profile) return
+    if (enabled) {
+      const permission = await requestNotificationPermission()
+      if (permission !== 'granted') {
+        setError('กรุณาอนุญาตการแจ้งเตือนในเบราว์เซอร์ก่อน')
+        return
+      }
+      await subscribeToPush(user.id).catch(() => {})
+    } else if (!profile.reminder_enabled) {
+      // Only drop the device subscription if no other push feature still needs it.
+      await unsubscribeFromPush(user.id).catch(() => {})
+    }
+    const updated = await updateProfile(user.id, { daily_summary_enabled: enabled })
+    setProfile(updated)
   }
 
   async function handleLogout() {
@@ -165,44 +195,47 @@ export function ProfilePage() {
           <div className="flex gap-3">
             <label className="flex min-w-0 flex-1 flex-col gap-1 text-sm text-slate-600">
               น้ำหนัก (kg)
-              <input
-                type="number"
-                value={profile.weight_kg ?? ''}
-                onChange={(e) => setProfile({ ...profile, weight_kg: Number(e.target.value) })}
-                className="w-full min-w-0 rounded-2xl border border-slate-200 px-3 py-2.5 outline-none transition focus:border-water-500 focus:ring-4 focus:ring-water-100"
-              />
+              <div className="relative">
+                <ScaleIcon className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-water-400" />
+                <input
+                  type="number"
+                  value={profile.weight_kg ?? ''}
+                  onChange={(e) => setProfile({ ...profile, weight_kg: Number(e.target.value) })}
+                  className="w-full min-w-0 rounded-2xl border border-slate-200 py-2.5 pl-9 pr-3 outline-none transition focus:border-water-500 focus:ring-4 focus:ring-water-100"
+                />
+              </div>
             </label>
             <label className="flex min-w-0 flex-1 flex-col gap-1 text-sm text-slate-600">
               ส่วนสูง (cm)
-              <input
-                type="number"
-                value={profile.height_cm ?? ''}
-                onChange={(e) => setProfile({ ...profile, height_cm: Number(e.target.value) })}
-                className="w-full min-w-0 rounded-2xl border border-slate-200 px-3 py-2.5 outline-none transition focus:border-water-500 focus:ring-4 focus:ring-water-100"
-              />
+              <div className="relative">
+                <ArrowsUpDownIcon className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-water-400" />
+                <input
+                  type="number"
+                  value={profile.height_cm ?? ''}
+                  onChange={(e) => setProfile({ ...profile, height_cm: Number(e.target.value) })}
+                  className="w-full min-w-0 rounded-2xl border border-slate-200 py-2.5 pl-9 pr-3 outline-none transition focus:border-water-500 focus:ring-4 focus:ring-water-100"
+                />
+              </div>
             </label>
           </div>
+
           {bmi !== null && bmiCategory && (
-            <span
-              className={`self-start rounded-full px-3 py-1 text-xs font-medium ${BMI_TONE_CLASSES[bmiCategory.tone]}`}
-            >
-              BMI {bmi} · {bmiCategory.label}
-            </span>
+            <div className="my-1 flex flex-col items-center">
+              <BmiGauge bmi={bmi} tone={bmiCategory.tone} />
+              <p className="font-display mt-1 text-3xl font-bold text-water-700">{bmi}</p>
+              <span className={`mt-1 rounded-full px-3 py-1 text-xs font-medium ${BMI_TONE_CLASSES[bmiCategory.tone]}`}>
+                {bmiCategory.label}
+              </span>
+            </div>
           )}
 
           <label className="flex flex-col gap-1 text-sm text-slate-600">
             ระดับกิจกรรม
-            <select
+            <Select
               value={profile.activity_level}
-              onChange={(e) => setProfile({ ...profile, activity_level: e.target.value as ActivityLevel })}
-              className="rounded-2xl border border-slate-200 px-3 py-2.5 outline-none transition focus:border-water-500 focus:ring-4 focus:ring-water-100"
-            >
-              {ACTIVITY_OPTIONS.map((opt) => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </option>
-              ))}
-            </select>
+              options={ACTIVITY_OPTIONS}
+              onChange={(v) => setProfile({ ...profile, activity_level: v })}
+            />
           </label>
 
           <div className="rounded-2xl bg-water-50 p-4">
@@ -317,6 +350,19 @@ export function ProfilePage() {
             </button>
           </div>
         )}
+
+        <div className="mt-4 border-t border-slate-100 pt-4">
+          <label className="flex items-center justify-between text-sm text-slate-600">
+            <span>สรุปวันท้ายวัน (21:00)</span>
+            <input
+              type="checkbox"
+              checked={profile.daily_summary_enabled}
+              onChange={(e) => handleDailySummaryToggle(e.target.checked)}
+              className="h-5 w-5 accent-water-500"
+            />
+          </label>
+          <p className="mt-1 text-xs text-slate-400">แจ้งเตือนสรุปว่าวันนี้ดื่มน้ำไปเท่าไหร่ ตอนสามทุ่ม</p>
+        </div>
       </div>
 
       <div className="w-full max-w-sm rounded-[28px] bg-white p-6 shadow-md shadow-water-100">
@@ -332,6 +378,24 @@ export function ProfilePage() {
             className="h-5 w-5 accent-water-500"
           />
         </label>
+      </div>
+
+      <div className="w-full max-w-sm rounded-[28px] border border-amber-100 bg-gradient-to-br from-amber-50 to-white p-6 shadow-md shadow-amber-100/70">
+        <label className="flex items-center justify-between text-sm text-slate-600">
+          <span className="flex items-center gap-2 font-semibold text-amber-600">
+            <CocktailIcon className="h-4 w-4 text-amber-500" fillPercent={40} />
+            บันทึกแอลกอฮอล์
+          </span>
+          <input
+            type="checkbox"
+            checked={alcoholTrackingOn}
+            onChange={(e) => handleAlcoholTrackingToggle(e.target.checked)}
+            className="h-5 w-5 accent-amber-500"
+          />
+        </label>
+        <p className="mt-2 text-xs text-amber-500">
+          เปิดเพื่อแสดงวิดเจ็ตบันทึกแอลกอฮอล์ในหน้าหลัก
+        </p>
       </div>
 
       {canInstall && (

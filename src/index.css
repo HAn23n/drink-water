@@ -20,6 +20,21 @@
   --color-sun-300: #ffe19a;
   --color-sun-400: #ffc857;
 
+  /* Amber — reserved for the alcohol-tracking widget, so it reads as its own zone */
+  --color-amber-50: #fdf3e7;
+  --color-amber-100: #f8e2c2;
+  --color-amber-300: #e8b673;
+  --color-amber-400: #d99a3f;
+  --color-amber-500: #b8752a;
+  --color-amber-600: #8f571e;
+
+  /* Mint — reserved for "done/success" states (e.g. completed checklist steps),
+     so achieving something reads distinctly from the everyday brand blue */
+  --color-mint-100: #d3f3e3;
+  --color-mint-400: #34c88a;
+  --color-mint-500: #22a873;
+  --color-mint-600: #16855a;
+
   --font-display: 'Kanit', system-ui, sans-serif;
   --font-body: 'IBM Plex Sans Thai', system-ui, sans-serif;
 }
@@ -35,6 +50,29 @@ body {
   background: var(--color-water-50);
   font-family: var(--font-body);
   -webkit-font-smoothing: antialiased;
+}
+
+/* Mobile browsers paint a dark tap-highlight box on every button press by
+   default — with our own hover/active styles already covering feedback,
+   that box just reads as a stray black border. Keep a visible ring for
+   keyboard users (:focus-visible) and drop it everywhere else. */
+button,
+a,
+[role='button'] {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button:focus:not(:focus-visible),
+a:focus:not(:focus-visible),
+[role='button']:focus:not(:focus-visible) {
+  outline: none;
+}
+
+button:focus-visible,
+a:focus-visible,
+[role='button']:focus-visible {
+  outline: 2px solid var(--color-water-500);
+  outline-offset: 2px;
 }
 
 @keyframes wave-move {

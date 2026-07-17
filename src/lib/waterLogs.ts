@@ -17,7 +17,7 @@ export async function addWaterLog(
   timezone: string,
   /** Backdate to a specific "YYYY-MM-DD" (e.g. yesterday). Defaults to right now. */
   targetDate?: string,
-): Promise<void> {
+): Promise<string> {
   // Noon avoids any DST/rounding ambiguity and reads as a sensible "logged around midday".
   const loggedAt = targetDate ? new Date(`${targetDate}T12:00:00`) : new Date()
   const entry: QueuedWaterLog = {
@@ -30,6 +30,7 @@ export async function addWaterLog(
   // Always land in the local queue first so a dropped connection never loses the entry.
   await enqueue(entry)
   await syncPendingLogs(userId)
+  return entry.client_id
 }
 
 /** Pushes any queued logs to Supabase. Safe to call repeatedly (e.g. on reconnect). */

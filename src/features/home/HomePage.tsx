@@ -1,7 +1,19 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { PlusIcon, TrashIcon, ClockIcon, InformationCircleIcon } from '@heroicons/react/24/outline'
-import { CheckBadgeIcon } from '@heroicons/react/24/solid'
+import { Reorder } from 'framer-motion'
+import { v4 as uuidv4 } from 'uuid'
+import {
+  PlusIcon,
+  TrashIcon,
+  ClockIcon,
+  InformationCircleIcon,
+  AdjustmentsHorizontalIcon,
+  CheckIcon,
+  LightBulbIcon,
+  XMarkIcon,
+  ChartBarIcon,
+} from '@heroicons/react/24/outline'
+import { CheckBadgeIcon, FireIcon } from '@heroicons/react/24/solid'
 import { LoadingScreen, ErrorScreen } from '../../components/LoadingScreen'
 import { ConfirmDialog } from '../../components/ConfirmDialog'
 import { GlassIcon, BottleIcon } from '../../components/DrinkIcons'
@@ -13,10 +25,24 @@ import { todayInTimeZone, yesterdayInTimeZone } from '../../lib/water'
 import { playAddSound } from '../../lib/sound'
 import { celebrateGoalReached } from '../../lib/celebrate'
 import { getTipOfTheDay } from '../../lib/tips'
+import { isAlcoholTrackingEnabled } from '../../lib/alcoholPref'
+import { getCustomPresets, saveCustomPresets, type CustomPreset } from '../../lib/customPresets'
+import { fetchDailyTotals, calculateStreak, type DailyTotal } from '../../lib/history'
+import {
+  getWidgetOrder,
+  saveWidgetOrder,
+  getHiddenWidgets,
+  saveHiddenWidgets,
+  DEFAULT_WIDGET_ORDER,
+  WIDGET_LABELS,
+  type WidgetId,
+} from '../../lib/widgetLayout'
 import { WaveCircle } from '../../components/WaveCircle'
 import { PacingChecklist } from './PacingChecklist'
 import { DailySummaryModal } from './DailySummaryModal'
 import { AlcoholCard } from './AlcoholCard'
+import { DraggableWidget } from './DraggableWidget'
+import { ChallengeCard } from '../history/ChallengeCard'
 
 type TargetDay = 'today' | 'yesterday'
 
@@ -24,7 +50,7 @@ export function HomePage() {
   const { user } = useAuth()
   const navigate = useNavigate()
   const [profile, setProfile] = useState<Profile | null>(null)
-  const [logDate, setLogDate] = useState<string | null>(null)
+  const [todayDate, setTodayDate] = useState<string | null>(null)
   const [logs, setLogs] = useState<WaterLog[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -34,12 +60,23 @@ export function HomePage() {
   const [targetDay, setTargetDay] = useState<TargetDay>('today')
   const [backdateNotice, setBackdateNotice] = useState<string | null>(null)
   const [showSummary, setShowSummary] = useState(false)
+  const [widgetOrder, setWidgetOrder] = useState<WidgetId[]>(DEFAULT_WIDGET_ORDER)
+  const [hiddenWidgets, setHiddenWidgets] = useState<WidgetId[]>([])
+  const [editLayout, setEditLayout] = useState(false)
+  const [alcoholEnabled] = useState(() => isAlcoholTrackingEnabled())
+  const [recentTotals, setRecentTotals] = useState<DailyTotal[]>([])
+  const [lastAdded, setLastAdded] = useState<{ clientId: string; amountMl: number } | null>(null)
+  const [presets, setPresets] = useState<CustomPreset[]>([])
+  const [showSavePreset, setShowSavePreset] = useState(false)
+  const [presetName, setPresetName] = useState('')
   const celebratedRef = useRef(false)
 
-  const reloadLogs = useCallback(async (userId: string, timezone: string) => {
-    const today = todayInTimeZone(timezone)
-    setLogDate(today)
-    setLogs(await fetchLogsForDate(userId, today))
+  // The water totals/list on screen follow whichever day is toggled; streak/tip/alcohol
+  // always stay pinned to the real "today" regardless of what's being viewed/backdated.
+  const viewDate = profile && todayDate ? (targetDay === 'yesterday' ? yesterdayInTimeZone(profile.timezone) : todayDate) : null
+
+  const reloadLogsForDate = useCallback(async (userId: string, date: string) => {
+    setLogs(await fetchLogsForDate(userId, date))
   }, [])
 
   useEffect(() => {
@@ -55,8 +92,15 @@ export function HomePage() {
           return
         }
         setProfile(loadedProfile)
+        setWidgetOrder(getWidgetOrder(user!.id))
+        setHiddenWidgets(getHiddenWidgets(user!.id))
+        setPresets(getCustomPresets(user!.id))
         await syncPendingLogs(user!.id)
-        await reloadLogs(user!.id, loadedProfile.timezone)
+        const today = todayInTimeZone(loadedProfile.timezone)
+        setTodayDate(today)
+        await reloadLogsForDate(user!.id, today)
+        const totals = await fetchDailyTotals(user!.id, loadedProfile.timezone, loadedProfile.daily_goal_ml, 30)
+        if (!cancelled) setRecentTotals(totals)
       } catch (err) {
         if (!cancelled) setError(err instanceof Error ? err.message : 'โหลดข้อมูลไม่สำเร็จ')
       } finally {
@@ -68,31 +112,39 @@ export function HomePage() {
     return () => {
       cancelled = true
     }
-  }, [user, navigate, reloadLogs])
+  }, [user, navigate, reloadLogsForDate])
 
-  // Keep the counter honest across a midnight rollover and reconnects.
+  // Refetch whenever the viewed day changes — toggling today/yesterday, or a rollover.
   useEffect(() => {
-    if (!user || !profile) return
+    if (!user || !viewDate) return
+    reloadLogsForDate(user.id, viewDate)
+  }, [user, viewDate, reloadLogsForDate])
+
+  // Keep "today" honest across a midnight rollover and reconnects.
+  useEffect(() => {
+    if (!user || !profile || !viewDate) return
 
     const onOnline = () => {
-      syncPendingLogs(user.id).then(() => reloadLogs(user.id, profile.timezone))
+      syncPendingLogs(user.id).then(() => reloadLogsForDate(user.id, viewDate))
     }
     window.addEventListener('online', onOnline)
 
     const dayCheck = setInterval(() => {
       const today = todayInTimeZone(profile.timezone)
-      if (today !== logDate) reloadLogs(user.id, profile.timezone)
+      if (today !== todayDate) setTodayDate(today)
     }, 60_000)
 
     return () => {
       window.removeEventListener('online', onOnline)
       clearInterval(dayCheck)
     }
-  }, [user, profile, logDate, reloadLogs])
+  }, [user, profile, todayDate, viewDate, reloadLogsForDate])
 
   const totalMl = logs.reduce((sum, log) => sum + log.amount_ml, 0)
   const percent = profile && profile.daily_goal_ml > 0 ? (totalMl / profile.daily_goal_ml) * 100 : 0
-  const goalReached = percent >= 100
+  const viewGoalReached = percent >= 100
+  // Confetti/banner are about crossing today's goal specifically — not a retroactive backdate.
+  const goalReached = targetDay === 'today' && viewGoalReached
 
   // Celebrate once per crossing — resets so a later dip-and-recross (e.g. after
   // undoing a log) can celebrate again, but a render while already over 100% won't.
@@ -106,19 +158,20 @@ export function HomePage() {
   }, [goalReached])
 
   async function handleAdd(amountMl: number) {
-    if (!user || !profile || amountMl <= 0) return
+    if (!user || !profile || !viewDate || amountMl <= 0) return
     try {
       if (targetDay === 'yesterday') {
-        const yesterday = yesterdayInTimeZone(profile.timezone)
-        await addWaterLog(user.id, amountMl, profile.timezone, yesterday)
+        await addWaterLog(user.id, amountMl, profile.timezone, viewDate)
         playAddSound()
+        await reloadLogsForDate(user.id, viewDate)
         setBackdateNotice(`บันทึก ${amountMl} ml ลงเมื่อวานแล้ว`)
-        setTargetDay('today')
         setTimeout(() => setBackdateNotice(null), 3000)
       } else {
-        await addWaterLog(user.id, amountMl, profile.timezone)
+        const clientId = await addWaterLog(user.id, amountMl, profile.timezone)
         playAddSound()
-        await reloadLogs(user.id, profile.timezone)
+        await reloadLogsForDate(user.id, viewDate)
+        setLastAdded({ clientId, amountMl })
+        setTimeout(() => setLastAdded((prev) => (prev?.clientId === clientId ? null : prev)), 6000)
       }
       setCustomAmount('')
       setShowCustom(false)
@@ -127,8 +180,43 @@ export function HomePage() {
     }
   }
 
+  async function handleUndo() {
+    if (!user || !viewDate || !lastAdded) return
+    const target = logs.find((l) => l.client_id === lastAdded.clientId)
+    setLastAdded(null)
+    if (!target) return
+    try {
+      if (target.id) {
+        await deleteWaterLog(target.id)
+      } else {
+        await removeFromQueue(target.client_id)
+      }
+      await reloadLogsForDate(user.id, viewDate)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'เลิกทำไม่สำเร็จ')
+    }
+  }
+
+  function handleSavePreset() {
+    if (!user) return
+    const amount = Number(customAmount)
+    if (!presetName.trim() || !(amount > 0)) return
+    const updated = [...presets, { id: uuidv4(), label: presetName.trim(), amountMl: amount }]
+    setPresets(updated)
+    saveCustomPresets(user.id, updated)
+    setPresetName('')
+    setShowSavePreset(false)
+  }
+
+  function handleRemovePreset(id: string) {
+    if (!user) return
+    const updated = presets.filter((p) => p.id !== id)
+    setPresets(updated)
+    saveCustomPresets(user.id, updated)
+  }
+
   async function handleConfirmDelete() {
-    if (!user || !profile || !pendingDelete) return
+    if (!user || !viewDate || !pendingDelete) return
     const log = pendingDelete
     setPendingDelete(null)
     try {
@@ -137,10 +225,29 @@ export function HomePage() {
       } else {
         await removeFromQueue(log.client_id)
       }
-      await reloadLogs(user.id, profile.timezone)
+      await reloadLogsForDate(user.id, viewDate)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'ลบไม่สำเร็จ')
     }
+  }
+
+  function handleReorder(newOrder: WidgetId[]) {
+    setWidgetOrder(newOrder)
+    if (user) saveWidgetOrder(user.id, newOrder)
+  }
+
+  function handleHideWidget(id: WidgetId) {
+    if (!user) return
+    const updated = [...hiddenWidgets, id]
+    setHiddenWidgets(updated)
+    saveHiddenWidgets(user.id, updated)
+  }
+
+  function handleShowWidget(id: WidgetId) {
+    if (!user) return
+    const updated = hiddenWidgets.filter((h) => h !== id)
+    setHiddenWidgets(updated)
+    saveHiddenWidgets(user.id, updated)
   }
 
   if (loading) return <LoadingScreen />
@@ -175,6 +282,84 @@ export function HomePage() {
     },
   ]
 
+  const widgetContent: Record<WidgetId, ReactNode> = {
+    logs: (
+      <div className="w-full max-w-sm">
+        <h2 className="mb-2 text-sm font-medium text-slate-500">
+          {targetDay === 'yesterday' ? 'รายการเมื่อวาน' : 'รายการวันนี้'}
+        </h2>
+        {logs.length === 0 ? (
+          <p className="text-sm text-slate-400">
+            {targetDay === 'yesterday' ? 'ยังไม่มีการบันทึกเมื่อวาน' : 'ยังไม่มีการบันทึกวันนี้'}
+          </p>
+        ) : (
+          <ul className="flex flex-col gap-2">
+            {logs.map((log) => (
+              <li
+                key={log.client_id}
+                className="flex items-center justify-between rounded-2xl bg-white px-4 py-3 shadow-sm"
+              >
+                <span className="flex items-center gap-2 text-sm text-slate-600">
+                  <ClockIcon className="h-4 w-4 text-slate-300" />
+                  {new Date(log.logged_at).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })}
+                  {' — '}
+                  {log.amount_ml} ml
+                  {!log.id && <span className="ml-1 text-xs text-sun-400">(รอซิงค์)</span>}
+                </span>
+                <button
+                  onClick={() => setPendingDelete(log)}
+                  aria-label="ลบรายการนี้"
+                  className="rounded-full p-1.5 text-coral-400 transition hover:bg-coral-100 hover:text-coral-600"
+                >
+                  <TrashIcon className="h-4 w-4" />
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    ),
+    pacing: (
+      <PacingChecklist
+        reminderStart={profile.reminder_start}
+        reminderEnd={profile.reminder_end}
+        dailyGoalMl={profile.daily_goal_ml}
+        totalMlSoFar={totalMl}
+      />
+    ),
+    alcohol: alcoholEnabled ? (
+      <AlcoholCard userId={user!.id} logDate={todayDate ?? todayInTimeZone(profile.timezone)} />
+    ) : null,
+    tip: todayDate ? (
+      <div className="flex w-full max-w-sm items-start gap-3 rounded-3xl bg-white p-4 shadow-md shadow-water-100">
+        <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-sun-300/40">
+          <LightBulbIcon className="h-5 w-5 text-sun-400" />
+        </span>
+        <div>
+          <p className="mb-0.5 text-xs font-semibold text-slate-500">เคล็ดลับวันนี้</p>
+          <p className="text-sm text-slate-600">{getTipOfTheDay(todayDate)}</p>
+        </div>
+      </div>
+    ) : null,
+    challenge: <ChallengeCard userId={user!.id} timezone={profile.timezone} dailyGoalMl={profile.daily_goal_ml} />,
+  }
+
+  const visibleWidgetOrder = widgetOrder.filter(
+    (id) => !hiddenWidgets.includes(id) && (id !== 'alcohol' || alcoholEnabled) && widgetContent[id] !== null,
+  )
+  const addableWidgets = hiddenWidgets.filter((id) => id !== 'alcohol')
+
+  // Patch in today's live total so the streak doesn't lag behind what's on screen —
+  // only while actually viewing today (viewing/backdating yesterday shouldn't touch it).
+  const displayTotals =
+    targetDay === 'today' && recentTotals.length > 0 && todayDate === recentTotals[recentTotals.length - 1].date
+      ? [
+          ...recentTotals.slice(0, -1),
+          { date: todayDate, totalMl, goalMet: totalMl >= profile.daily_goal_ml },
+        ]
+      : recentTotals
+  const streak = calculateStreak(displayTotals)
+
   return (
     <div className="flex min-h-full flex-col items-center gap-6 bg-water-50 px-6 py-10">
       {error && <p className="text-sm text-coral-500">{error}</p>}
@@ -191,19 +376,51 @@ export function HomePage() {
         </div>
       )}
 
+      {lastAdded && (
+        <div className="flex w-full max-w-sm items-center justify-between gap-2 rounded-full bg-water-700 px-4 py-2 text-sm text-white shadow-lg shadow-water-700/30">
+          <span>เพิ่ม {lastAdded.amountMl.toLocaleString()} ml แล้ว</span>
+          <button onClick={handleUndo} className="font-medium text-sun-300 hover:underline">
+            เลิกทำ
+          </button>
+        </div>
+      )}
+
+      {targetDay === 'yesterday' && (
+        <p className="w-full max-w-sm rounded-full bg-water-100 px-4 py-2 text-center text-xs font-medium text-water-700">
+          กำลังดูข้อมูลของเมื่อวาน
+        </p>
+      )}
+
       <div className="relative">
         <WaveCircle
           percent={percent}
           label={`${totalMl.toLocaleString()} / ${profile.daily_goal_ml.toLocaleString()} ml`}
-          sublabel={goalReached ? 'ดื่มเกินเป้าหมายก็ได้ ดื่มต่อได้เลย' : `เหลืออีก ${Math.max(profile.daily_goal_ml - totalMl, 0)} ml`}
+          sublabel={viewGoalReached ? 'ดื่มเกินเป้าหมายก็ได้ ดื่มต่อได้เลย' : `เหลืออีก ${Math.max(profile.daily_goal_ml - totalMl, 0)} ml`}
         />
-        <button
-          onClick={() => setShowSummary(true)}
-          aria-label="สรุปวันนี้"
-          className="absolute -right-2 -bottom-2 rounded-full bg-white p-2 text-water-500 shadow-md shadow-water-100 transition hover:bg-water-50"
-        >
-          <InformationCircleIcon className="h-5 w-5" />
-        </button>
+        {streak > 0 && (
+          <div className="absolute -left-2 -top-2 flex items-center gap-1 rounded-full bg-white px-3 py-1.5 shadow-md shadow-water-100">
+            <FireIcon className="h-4 w-4 text-coral-500" />
+            <span className="font-display text-xs font-semibold text-coral-600">{streak} วัน</span>
+          </div>
+        )}
+        <div className="absolute -right-2 -bottom-2 flex items-center gap-2">
+          <button
+            onClick={() => navigate('/history')}
+            aria-label="ดูประวัติย้อนหลัง"
+            className="rounded-full bg-white p-2 text-water-500 shadow-md shadow-water-100 transition hover:bg-water-50"
+          >
+            <ChartBarIcon className="h-5 w-5" />
+          </button>
+          {targetDay === 'today' && (
+            <button
+              onClick={() => setShowSummary(true)}
+              aria-label="สรุปวันนี้"
+              className="rounded-full bg-white p-2 text-water-500 shadow-md shadow-water-100 transition hover:bg-water-50"
+            >
+              <InformationCircleIcon className="h-5 w-5" />
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="flex w-full max-w-sm gap-2 self-center">
@@ -237,6 +454,25 @@ export function HomePage() {
             <span className="text-xs font-normal text-slate-400">{opt.amount} ml</span>
           </button>
         ))}
+        {presets.map((preset) => (
+          <div key={preset.id} className="relative">
+            <button
+              onClick={() => handleAdd(preset.amountMl)}
+              className="flex w-full flex-col items-center gap-1 rounded-3xl bg-white px-2 py-4 text-sm font-medium text-water-700 shadow-md shadow-water-100 transition hover:-translate-y-0.5 hover:shadow-lg"
+            >
+              <GlassIcon className="h-8 w-8 text-water-500" fillPercent={60} />
+              <span className="w-full truncate text-center">{preset.label}</span>
+              <span className="text-xs font-normal text-slate-400">{preset.amountMl} ml</span>
+            </button>
+            <button
+              onClick={() => handleRemovePreset(preset.id)}
+              aria-label="ลบแก้วโปรด"
+              className="absolute -right-1.5 -top-1.5 rounded-full bg-white p-1 text-coral-400 shadow-sm shadow-water-100 transition hover:bg-coral-100 hover:text-coral-600"
+            >
+              <XMarkIcon className="h-3 w-3" />
+            </button>
+          </div>
+        ))}
         <button
           onClick={() => setShowCustom((v) => !v)}
           className="flex flex-col items-center justify-center gap-1 rounded-3xl bg-white px-2 py-4 text-sm font-medium text-water-700 shadow-md shadow-water-100 transition hover:-translate-y-0.5 hover:shadow-lg"
@@ -247,76 +483,114 @@ export function HomePage() {
       </div>
 
       {showCustom && (
-        <form
-          onSubmit={(e) => {
-            e.preventDefault()
-            handleAdd(Number(customAmount))
-          }}
-          className="flex w-full max-w-sm gap-2"
-        >
-          <input
-            type="number"
-            min={1}
-            required
-            autoFocus
-            placeholder="ปริมาณ (ml)"
-            value={customAmount}
-            onChange={(e) => setCustomAmount(e.target.value)}
-            className="flex-1 rounded-full border border-slate-200 px-4 py-2.5 outline-none transition focus:border-water-500 focus:ring-4 focus:ring-water-100"
-          />
-          <button
-            type="submit"
-            className="rounded-full bg-water-500 px-5 py-2.5 font-medium text-white transition hover:bg-water-600"
+        <div className="flex w-full max-w-sm flex-col gap-2">
+          <form
+            onSubmit={(e) => {
+              e.preventDefault()
+              handleAdd(Number(customAmount))
+            }}
+            className="flex gap-2"
           >
-            เพิ่ม
-          </button>
-        </form>
+            <input
+              type="number"
+              min={1}
+              required
+              autoFocus
+              placeholder="ปริมาณ (ml)"
+              value={customAmount}
+              onChange={(e) => setCustomAmount(e.target.value)}
+              className="flex-1 rounded-full border border-slate-200 px-4 py-2.5 outline-none transition focus:border-water-500 focus:ring-4 focus:ring-water-100"
+            />
+            <button
+              type="submit"
+              className="rounded-full bg-water-500 px-5 py-2.5 font-medium text-white transition hover:bg-water-600"
+            >
+              เพิ่ม
+            </button>
+          </form>
+
+          {!showSavePreset ? (
+            <button
+              type="button"
+              onClick={() => setShowSavePreset(true)}
+              className="self-start text-xs text-water-600 hover:underline"
+            >
+              + บันทึกเป็นแก้วโปรด
+            </button>
+          ) : (
+            <div className="flex gap-2">
+              <input
+                placeholder="ชื่อแก้วโปรด เช่น แก้วเย็น"
+                value={presetName}
+                onChange={(e) => setPresetName(e.target.value)}
+                className="flex-1 rounded-full border border-slate-200 px-4 py-2 text-sm outline-none transition focus:border-water-500 focus:ring-4 focus:ring-water-100"
+              />
+              <button
+                type="button"
+                onClick={handleSavePreset}
+                className="rounded-full bg-water-100 px-4 py-2 text-xs font-medium text-water-700 transition hover:bg-water-200"
+              >
+                บันทึก
+              </button>
+            </div>
+          )}
+        </div>
       )}
 
-      <div className="w-full max-w-sm">
-        <h2 className="mb-2 text-sm font-medium text-slate-500">รายการวันนี้</h2>
-        {logs.length === 0 ? (
-          <p className="text-sm text-slate-400">ยังไม่มีการบันทึกวันนี้</p>
+      <button
+        onClick={() => setEditLayout((v) => !v)}
+        className={`flex items-center gap-1.5 self-center rounded-full px-4 py-1.5 text-xs font-medium transition ${
+          editLayout ? 'bg-water-500 text-white shadow-md shadow-water-500/30' : 'bg-white text-slate-400 shadow-sm'
+        }`}
+      >
+        {editLayout ? (
+          <>
+            <CheckIcon className="h-3.5 w-3.5" />
+            เสร็จแล้ว
+          </>
         ) : (
-          <ul className="flex flex-col gap-2">
-            {logs.map((log) => (
-              <li
-                key={log.client_id}
-                className="flex items-center justify-between rounded-2xl bg-white px-4 py-3 shadow-sm"
-              >
-                <span className="flex items-center gap-2 text-sm text-slate-600">
-                  <ClockIcon className="h-4 w-4 text-slate-300" />
-                  {new Date(log.logged_at).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })}
-                  {' — '}
-                  {log.amount_ml} ml
-                  {!log.id && <span className="ml-1 text-xs text-sun-400">(รอซิงค์)</span>}
-                </span>
-                <button
-                  onClick={() => setPendingDelete(log)}
-                  aria-label="ลบรายการนี้"
-                  className="rounded-full p-1.5 text-coral-400 transition hover:bg-coral-100 hover:text-coral-600"
-                >
-                  <TrashIcon className="h-4 w-4" />
-                </button>
-              </li>
-            ))}
-          </ul>
+          <>
+            <AdjustmentsHorizontalIcon className="h-3.5 w-3.5" />
+            จัดเรียงวิดเจ็ต
+          </>
         )}
-      </div>
+      </button>
 
-      <PacingChecklist
-        reminderStart={profile.reminder_start}
-        reminderEnd={profile.reminder_end}
-        dailyGoalMl={profile.daily_goal_ml}
-        totalMlSoFar={totalMl}
-      />
+      {editLayout && addableWidgets.length > 0 && (
+        <div className="flex w-full max-w-sm flex-wrap justify-center gap-2">
+          {addableWidgets.map((id) => (
+            <button
+              key={id}
+              onClick={() => handleShowWidget(id)}
+              className="flex items-center gap-1 rounded-full bg-white px-3 py-1.5 text-xs font-medium text-water-600 shadow-sm shadow-water-100 transition hover:bg-water-50"
+            >
+              <PlusIcon className="h-3 w-3" />
+              {WIDGET_LABELS[id]}
+            </button>
+          ))}
+        </div>
+      )}
 
-      <AlcoholCard userId={user!.id} logDate={logDate ?? todayInTimeZone(profile.timezone)} />
-
-      {logDate && (
-        <p className="w-full max-w-sm rounded-2xl bg-water-100/60 p-3 text-center text-xs text-water-700">
-          💡 {getTipOfTheDay(logDate)}
-        </p>
+      {editLayout ? (
+        <Reorder.Group
+          as="div"
+          axis="y"
+          values={visibleWidgetOrder}
+          onReorder={handleReorder}
+          className="flex w-full max-w-sm flex-col gap-4"
+        >
+          {visibleWidgetOrder.map((id) => (
+            <DraggableWidget key={id} id={id} onRemove={() => handleHideWidget(id)}>
+              {widgetContent[id]}
+            </DraggableWidget>
+          ))}
+        </Reorder.Group>
+      ) : (
+        <div className="flex w-full max-w-sm flex-col gap-4">
+          {visibleWidgetOrder.map((id) => (
+            <div key={id}>{widgetContent[id]}</div>
+          ))}
+        </div>
       )}
 
       <ConfirmDialog

@@ -65,7 +65,7 @@ export function Calendar({ userId, timezone, dailyGoalMl }: CalendarProps) {
   const monthLabel = firstOfMonth.toLocaleDateString('th-TH', { month: 'long', year: 'numeric', timeZone: 'UTC' })
 
   return (
-    <div className="rounded-3xl bg-white p-4 shadow-md shadow-water-100">
+    <div>
       <div className="mb-3 flex items-center justify-between">
         <button
           onClick={prevMonth}

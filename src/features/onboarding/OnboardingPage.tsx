@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../lib/AuthContext'
 import { updateProfile } from '../../lib/profile'
 import { ACTIVITY_OPTIONS, calculateDailyGoalMl, type ActivityLevel } from '../../lib/water'
+import { Select } from '../../components/Select'
 
 export function OnboardingPage() {
   const { user } = useAuth()
@@ -88,17 +89,7 @@ export function OnboardingPage() {
 
           <label className="flex flex-col gap-1 text-sm text-slate-600">
             ระดับกิจกรรม
-            <select
-              value={activityLevel}
-              onChange={(e) => setActivityLevel(e.target.value as ActivityLevel)}
-              className="rounded-2xl border border-slate-200 px-4 py-2.5 outline-none transition focus:border-water-500 focus:ring-4 focus:ring-water-100"
-            >
-              {ACTIVITY_OPTIONS.map((opt) => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </option>
-              ))}
-            </select>
+            <Select value={activityLevel} options={ACTIVITY_OPTIONS} onChange={setActivityLevel} />
           </label>
 
           <div className="rounded-2xl bg-water-50 p-4 text-center">
