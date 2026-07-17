@@ -2,6 +2,10 @@
 alter table profiles add column daily_summary_enabled boolean not null default false;
 alter table profiles add column last_daily_summary_sent_date date;
 
+-- Enabled by default on Supabase projects; safe to run again if already on.
+create extension if not exists pg_cron;
+create extension if not exists pg_net;
+
 -- Replace <PROJECT_REF> and <CRON_SECRET> before running (see docs/PUSH_SETUP.md).
 -- CRON_SECRET must match the same value set as an Edge Function secret.
 select cron.schedule(
