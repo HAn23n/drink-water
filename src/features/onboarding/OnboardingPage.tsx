@@ -4,6 +4,7 @@ import { useAuth } from '../../lib/AuthContext'
 import { updateProfile } from '../../lib/profile'
 import { ACTIVITY_OPTIONS, calculateDailyGoalMl, type ActivityLevel } from '../../lib/water'
 import { Select } from '../../components/Select'
+import { NumberField } from '../../components/NumberField'
 
 export function OnboardingPage() {
   const { user } = useAuth()
@@ -63,25 +64,17 @@ export function OnboardingPage() {
           <div className="flex gap-3">
             <label className="flex min-w-0 flex-1 flex-col gap-1 text-sm text-slate-600">
               น้ำหนัก (kg)
-              <input
-                type="number"
-                required
-                min={20}
-                max={300}
+              <NumberField
                 value={weightKg}
-                onChange={(e) => setWeightKg(Number(e.target.value))}
+                onChange={(v) => v != null && setWeightKg(v)}
                 className="w-full min-w-0 rounded-2xl border border-slate-200 px-4 py-2.5 outline-none transition focus:border-water-500 focus:ring-4 focus:ring-water-100"
               />
             </label>
             <label className="flex min-w-0 flex-1 flex-col gap-1 text-sm text-slate-600">
               ส่วนสูง (cm)
-              <input
-                type="number"
-                required
-                min={100}
-                max={250}
+              <NumberField
                 value={heightCm}
-                onChange={(e) => setHeightCm(Number(e.target.value))}
+                onChange={(v) => v != null && setHeightCm(v)}
                 className="w-full min-w-0 rounded-2xl border border-slate-200 px-4 py-2.5 outline-none transition focus:border-water-500 focus:ring-4 focus:ring-water-100"
               />
             </label>
@@ -95,12 +88,10 @@ export function OnboardingPage() {
           <div className="rounded-2xl bg-water-50 p-4 text-center">
             <p className="text-sm text-slate-500">เป้าหมายน้ำต่อวัน</p>
             <div className="flex items-center justify-center gap-2">
-              <input
-                type="number"
-                min={500}
-                max={10000}
+              <NumberField
                 value={goal}
-                onChange={(e) => setGoalOverride(Number(e.target.value))}
+                nullable
+                onChange={setGoalOverride}
                 className="font-display w-28 rounded-xl border border-slate-200 bg-white px-3 py-1 text-center text-lg font-semibold text-water-700 outline-none focus:border-water-500"
               />
               <span className="text-slate-500">ml</span>

@@ -17,6 +17,7 @@ import { CheckBadgeIcon, FireIcon } from '@heroicons/react/24/solid'
 import { LoadingScreen, ErrorScreen } from '../../components/LoadingScreen'
 import { ConfirmDialog } from '../../components/ConfirmDialog'
 import { GlassIcon, BottleIcon } from '../../components/DrinkIcons'
+import { NumberField } from '../../components/NumberField'
 import { useAuth } from '../../lib/AuthContext'
 import { fetchProfile, type Profile } from '../../lib/profile'
 import { addWaterLog, deleteWaterLog, fetchLogsForDate, syncPendingLogs, type WaterLog } from '../../lib/waterLogs'
@@ -54,7 +55,7 @@ export function HomePage() {
   const [logs, setLogs] = useState<WaterLog[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [customAmount, setCustomAmount] = useState('')
+  const [customAmount, setCustomAmount] = useState<number | null>(null)
   const [showCustom, setShowCustom] = useState(false)
   const [pendingDelete, setPendingDelete] = useState<WaterLog | null>(null)
   const [targetDay, setTargetDay] = useState<TargetDay>('today')
@@ -173,7 +174,7 @@ export function HomePage() {
         setLastAdded({ clientId, amountMl })
         setTimeout(() => setLastAdded((prev) => (prev?.clientId === clientId ? null : prev)), 6000)
       }
-      setCustomAmount('')
+      setCustomAmount(null)
       setShowCustom(false)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'บันทึกไม่สำเร็จ')
@@ -199,7 +200,7 @@ export function HomePage() {
 
   function handleSavePreset() {
     if (!user) return
-    const amount = Number(customAmount)
+    const amount = customAmount ?? 0
     if (!presetName.trim() || !(amount > 0)) return
     const updated = [...presets, { id: uuidv4(), label: presetName.trim(), amountMl: amount }]
     setPresets(updated)
@@ -487,18 +488,16 @@ export function HomePage() {
           <form
             onSubmit={(e) => {
               e.preventDefault()
-              handleAdd(Number(customAmount))
+              handleAdd(customAmount ?? 0)
             }}
             className="flex gap-2"
           >
-            <input
-              type="number"
-              min={1}
-              required
+            <NumberField
+              value={customAmount}
+              nullable
               autoFocus
               placeholder="ปริมาณ (ml)"
-              value={customAmount}
-              onChange={(e) => setCustomAmount(e.target.value)}
+              onChange={setCustomAmount}
               className="flex-1 rounded-full border border-slate-200 px-4 py-2.5 outline-none transition focus:border-water-500 focus:ring-4 focus:ring-water-100"
             />
             <button

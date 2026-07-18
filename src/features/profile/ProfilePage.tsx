@@ -13,6 +13,7 @@ import {
 import { LoadingScreen, ErrorScreen } from '../../components/LoadingScreen'
 import { BmiGauge } from '../../components/BmiGauge'
 import { Select } from '../../components/Select'
+import { NumberField } from '../../components/NumberField'
 import { CocktailIcon } from '../../components/DrinkIcons'
 import { useAuth } from '../../lib/AuthContext'
 import { supabase } from '../../lib/supabase'
@@ -197,10 +198,11 @@ export function ProfilePage() {
               น้ำหนัก (kg)
               <div className="relative">
                 <ScaleIcon className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-water-400" />
-                <input
-                  type="number"
-                  value={profile.weight_kg ?? ''}
-                  onChange={(e) => setProfile({ ...profile, weight_kg: Number(e.target.value) })}
+                <NumberField
+                  value={profile.weight_kg}
+                  nullable
+                  decimal
+                  onChange={(v) => setProfile({ ...profile, weight_kg: v })}
                   className="w-full min-w-0 rounded-2xl border border-slate-200 py-2.5 pl-9 pr-3 outline-none transition focus:border-water-500 focus:ring-4 focus:ring-water-100"
                 />
               </div>
@@ -209,10 +211,10 @@ export function ProfilePage() {
               ส่วนสูง (cm)
               <div className="relative">
                 <ArrowsUpDownIcon className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-water-400" />
-                <input
-                  type="number"
-                  value={profile.height_cm ?? ''}
-                  onChange={(e) => setProfile({ ...profile, height_cm: Number(e.target.value) })}
+                <NumberField
+                  value={profile.height_cm}
+                  nullable
+                  onChange={(v) => setProfile({ ...profile, height_cm: v })}
                   className="w-full min-w-0 rounded-2xl border border-slate-200 py-2.5 pl-9 pr-3 outline-none transition focus:border-water-500 focus:ring-4 focus:ring-water-100"
                 />
               </div>
@@ -241,10 +243,9 @@ export function ProfilePage() {
           <div className="rounded-2xl bg-water-50 p-4">
             <p className="mb-2 text-sm text-slate-500">เป้าหมายน้ำต่อวัน</p>
             <div className="flex items-center gap-2">
-              <input
-                type="number"
+              <NumberField
                 value={profile.daily_goal_ml}
-                onChange={(e) => setProfile({ ...profile, daily_goal_ml: Number(e.target.value) })}
+                onChange={(v) => v != null && setProfile({ ...profile, daily_goal_ml: v })}
                 className="font-display w-28 min-w-0 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-center text-lg font-semibold text-water-700 outline-none focus:border-water-500"
               />
               <span className="text-sm text-slate-500">ml</span>
@@ -263,19 +264,17 @@ export function ProfilePage() {
           <div className="flex gap-3">
             <label className="flex min-w-0 flex-1 flex-col gap-1 text-sm text-slate-600">
               ขนาดแก้ว (ml)
-              <input
-                type="number"
+              <NumberField
                 value={profile.glass_size_ml}
-                onChange={(e) => setProfile({ ...profile, glass_size_ml: Number(e.target.value) })}
+                onChange={(v) => v != null && setProfile({ ...profile, glass_size_ml: v })}
                 className="w-full min-w-0 rounded-2xl border border-slate-200 px-3 py-2.5 outline-none transition focus:border-water-500 focus:ring-4 focus:ring-water-100"
               />
             </label>
             <label className="flex min-w-0 flex-1 flex-col gap-1 text-sm text-slate-600">
               ขนาดขวด (ml)
-              <input
-                type="number"
+              <NumberField
                 value={profile.bottle_size_ml}
-                onChange={(e) => setProfile({ ...profile, bottle_size_ml: Number(e.target.value) })}
+                onChange={(v) => v != null && setProfile({ ...profile, bottle_size_ml: v })}
                 className="w-full min-w-0 rounded-2xl border border-slate-200 px-3 py-2.5 outline-none transition focus:border-water-500 focus:ring-4 focus:ring-water-100"
               />
             </label>
@@ -311,33 +310,31 @@ export function ProfilePage() {
 
         {profile.reminder_enabled && (
           <div className="mt-3 flex flex-col gap-3">
-            <div className="flex gap-3">
-              <label className="flex min-w-0 flex-1 flex-col gap-1 text-sm text-slate-600">
+            <div className="grid grid-cols-2 gap-3">
+              <label className="flex min-w-0 flex-col gap-1 text-sm text-slate-600">
                 เริ่ม
                 <input
                   type="time"
                   value={profile.reminder_start}
                   onChange={(e) => setProfile({ ...profile, reminder_start: e.target.value })}
-                  className="w-full min-w-0 rounded-2xl border border-slate-200 px-3 py-2.5 outline-none transition focus:border-water-500 focus:ring-4 focus:ring-water-100"
+                  className="w-full min-w-0 appearance-none rounded-2xl border border-slate-200 px-3 py-2.5 outline-none transition focus:border-water-500 focus:ring-4 focus:ring-water-100"
                 />
               </label>
-              <label className="flex min-w-0 flex-1 flex-col gap-1 text-sm text-slate-600">
+              <label className="flex min-w-0 flex-col gap-1 text-sm text-slate-600">
                 สิ้นสุด
                 <input
                   type="time"
                   value={profile.reminder_end}
                   onChange={(e) => setProfile({ ...profile, reminder_end: e.target.value })}
-                  className="w-full min-w-0 rounded-2xl border border-slate-200 px-3 py-2.5 outline-none transition focus:border-water-500 focus:ring-4 focus:ring-water-100"
+                  className="w-full min-w-0 appearance-none rounded-2xl border border-slate-200 px-3 py-2.5 outline-none transition focus:border-water-500 focus:ring-4 focus:ring-water-100"
                 />
               </label>
             </div>
             <label className="flex flex-col gap-1 text-sm text-slate-600">
               เตือนทุกกี่นาที
-              <input
-                type="number"
-                min={15}
+              <NumberField
                 value={profile.reminder_interval_min}
-                onChange={(e) => setProfile({ ...profile, reminder_interval_min: Number(e.target.value) })}
+                onChange={(v) => v != null && setProfile({ ...profile, reminder_interval_min: v })}
                 className="rounded-2xl border border-slate-200 px-3 py-2.5 outline-none transition focus:border-water-500 focus:ring-4 focus:ring-water-100"
               />
             </label>
