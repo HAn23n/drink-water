@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { supabase } from '../../lib/supabase'
+import { Logo } from '../../components/Logo'
 
 function GoogleIcon() {
   return (
@@ -56,12 +57,12 @@ export function LoginPage() {
       />
 
       <div className="relative w-full max-w-sm rounded-[28px] bg-white p-8 text-center shadow-[0_30px_60px_-24px_rgba(11,79,115,0.35)]">
-        <span className="mb-5 inline-flex items-center gap-1 rounded-full bg-water-50 px-3 py-1 text-xs font-medium text-water-700">
-          💧 PWA ฟรี 100%
+        <span className="mb-5 inline-flex items-center gap-1.5 rounded-full bg-water-50 px-3 py-1 text-xs font-medium text-water-700">
+          <Logo className="h-3.5 w-3.5" /> PWA ฟรี 100%
         </span>
 
-        <div className="mx-auto mb-5 flex h-20 w-20 items-center justify-center rounded-[26px] bg-gradient-to-br from-water-400 to-water-600 text-4xl shadow-lg shadow-water-500/30">
-          💧
+        <div className="mx-auto mb-5 flex h-20 w-20 items-center justify-center rounded-[26px] bg-gradient-to-br from-water-400 to-water-600 shadow-lg shadow-water-500/30">
+          <Logo white className="h-11 w-11" />
         </div>
 
         <h1 className="font-display mb-2 text-3xl font-semibold text-water-700">

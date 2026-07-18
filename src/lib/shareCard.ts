@@ -16,6 +16,18 @@ function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: numbe
   ctx.closePath()
 }
 
+// The app's droplet mark, drawn centred at (cx, cy) at the given height.
+const DROPLET_PATH = 'M50 8 C40 28 20 46 20 66 A30 30 0 0 0 80 66 C80 46 60 28 50 8 Z'
+function drawDroplet(ctx: CanvasRenderingContext2D, cx: number, cy: number, height: number, fill: string) {
+  const s = height / 84 // the path spans y 8..92 → 84 units tall
+  ctx.save()
+  ctx.translate(cx - 50 * s, cy - 50 * s)
+  ctx.scale(s, s)
+  ctx.fillStyle = fill
+  ctx.fill(new Path2D(DROPLET_PATH))
+  ctx.restore()
+}
+
 async function generateShareCardBlob(data: ShareCardData): Promise<Blob> {
   await document.fonts.ready
 
@@ -54,17 +66,26 @@ async function generateShareCardBlob(data: ShareCardData): Promise<Blob> {
 
   ctx.textAlign = 'center'
 
-  // Top badge pill. letterSpacing isn't in every TS DOM lib version, so access it loosely.
+  // Top badge pill: droplet mark + wordmark. letterSpacing isn't in every TS DOM
+  // lib version, so access it loosely.
   const spacing = ctx as CanvasRenderingContext2D & { letterSpacing?: string }
-  const badge = '💧 DRINK WATER'
+  const badge = 'DRINK WATER'
   ctx.font = "600 30px Kanit, sans-serif"
   spacing.letterSpacing = '3px'
-  const badgeW = ctx.measureText(badge).width + 72
+  const textW = ctx.measureText(badge).width
+  const dropW = 26
+  const badgeGap = 14
+  const groupW = dropW + badgeGap + textW
+  const pillW = groupW + 80
   ctx.fillStyle = 'rgba(255,255,255,0.18)'
-  roundRect(ctx, W / 2 - badgeW / 2, 74, badgeW, 62, 31)
+  roundRect(ctx, W / 2 - pillW / 2, 74, pillW, 62, 31)
   ctx.fill()
+  const groupX = W / 2 - groupW / 2
+  drawDroplet(ctx, groupX + dropW / 2, 106, 34, '#ffffff')
   ctx.fillStyle = '#ffffff'
-  ctx.fillText(badge, W / 2, 115)
+  ctx.textAlign = 'left'
+  ctx.fillText(badge, groupX + dropW + badgeGap, 116)
+  ctx.textAlign = 'center'
   spacing.letterSpacing = '0px'
 
   // Name + subtitle
@@ -114,9 +135,7 @@ async function generateShareCardBlob(data: ShareCardData): Promise<Blob> {
   ctx.shadowBlur = 16
   ctx.fill()
   ctx.restore()
-  ctx.font = "600 30px Kanit, sans-serif"
-  ctx.fillStyle = '#3b82f6'
-  ctx.fillText('💧', barX + fillW, barY + barH / 2 + 10)
+  drawDroplet(ctx, barX + fillW, barY + barH / 2, 30, '#3b82f6')
 
   // Two glass stat cards
   const cardY = 880
