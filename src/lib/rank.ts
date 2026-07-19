@@ -10,11 +10,11 @@ export interface RankTier {
  *  history.ts) — deliberately not streak-based, so one off day doesn't cost
  *  progress the way it would for a streak. */
 export const RANK_TIERS: RankTier[] = [
-  { tier: 1, name: 'หยดน้ำ', minPoints: 0, toneClass: 'text-water-600', bgClass: 'bg-water-100' },
-  { tier: 2, name: 'สายธาร', minPoints: 7, toneClass: 'text-water-700', bgClass: 'bg-water-100' },
-  { tier: 3, name: 'แม่น้ำ', minPoints: 30, toneClass: 'text-white', bgClass: 'bg-water-500' },
-  { tier: 4, name: 'มหาสมุทร', minPoints: 100, toneClass: 'text-white', bgClass: 'bg-water-700' },
-  { tier: 5, name: 'จ้าวสมุทร', minPoints: 300, toneClass: 'text-white', bgClass: 'bg-gradient-to-br from-coral-500 to-sun-400' },
+  { tier: 1, name: 'มือใหม่หัดจิบ', minPoints: 0, toneClass: 'text-water-600', bgClass: 'bg-water-100' },
+  { tier: 2, name: 'สายชิลจิบน้ำ', minPoints: 7, toneClass: 'text-water-700', bgClass: 'bg-water-100' },
+  { tier: 3, name: 'ตัวแม่สายชุ่ม', minPoints: 30, toneClass: 'text-white', bgClass: 'bg-water-500' },
+  { tier: 4, name: 'เทพสายน้ำ', minPoints: 100, toneClass: 'text-white', bgClass: 'bg-water-700' },
+  { tier: 5, name: 'ตำนานสายชุ่ม', minPoints: 300, toneClass: 'text-white', bgClass: 'bg-gradient-to-br from-coral-500 to-sun-400' },
 ]
 
 export interface Rank {

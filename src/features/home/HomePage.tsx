@@ -12,6 +12,7 @@ import {
   LightBulbIcon,
   XMarkIcon,
   ChartBarIcon,
+  BoltIcon,
 } from '@heroicons/react/24/outline'
 import { CheckBadgeIcon, FireIcon } from '@heroicons/react/24/solid'
 import { LoadingScreen, ErrorScreen } from '../../components/LoadingScreen'
@@ -80,6 +81,7 @@ export function HomePage() {
   const [otherDrinkTotal, setOtherDrinkTotal] = useState(0)
   const [rankPoints, setRankPoints] = useState(0)
   const celebratedRef = useRef(false)
+  const nearGoalRef = useRef(false)
 
   // The water totals/list on screen follow whichever day is toggled; streak/tip/alcohol
   // always stay pinned to the real "today" regardless of what's being viewed/backdated.
@@ -114,9 +116,19 @@ export function HomePage() {
         const today = todayInTimeZone(loadedProfile.timezone)
         setTodayDate(today)
         await Promise.all([reloadLogsForDate(user!.id, today), reloadOtherDrinksForDate(user!.id, today)])
-        const totals = await fetchDailyTotals(user!.id, loadedProfile.timezone, loadedProfile.daily_goal_ml, 30)
+        const totals = await fetchDailyTotals(
+          user!.id,
+          loadedProfile.timezone,
+          loadedProfile.daily_goal_ml,
+          30,
+          loadedProfile.caffeine_compensation_ratio,
+        )
         if (!cancelled) setRecentTotals(totals)
-        const points = await fetchRankPoints(user!.id, loadedProfile.daily_goal_ml)
+        const points = await fetchRankPoints(
+          user!.id,
+          loadedProfile.daily_goal_ml,
+          loadedProfile.caffeine_compensation_ratio,
+        )
         if (!cancelled) setRankPoints(points)
       } catch (err) {
         if (!cancelled) setError(err instanceof Error ? err.message : 'โหลดข้อมูลไม่สำเร็จ')
@@ -162,11 +174,17 @@ export function HomePage() {
   // Sweet/caffeinated drinks count at a reduced rate toward the goal, and bump the
   // goal itself up a bit to compensate — see src/lib/otherDrinks.ts for the ratios.
   const effectiveTotalMl = totalMl + otherDrinkWaterCredit(otherDrinkTotal)
-  const effectiveGoalMl = profile ? profile.daily_goal_ml + otherDrinkGoalCompensation(otherDrinkTotal) : 0
+  const effectiveGoalMl = profile
+    ? profile.daily_goal_ml + otherDrinkGoalCompensation(otherDrinkTotal, profile.caffeine_compensation_ratio)
+    : 0
   const percent = effectiveGoalMl > 0 ? (effectiveTotalMl / effectiveGoalMl) * 100 : 0
   const viewGoalReached = percent >= 100
   // Confetti/banner are about crossing today's goal specifically — not a retroactive backdate.
   const goalReached = targetDay === 'today' && viewGoalReached
+  const remainingMl = Math.max(Math.round(effectiveGoalMl - effectiveTotalMl), 0)
+  // An encouraging nudge for the home stretch — distinct from the reminder pushes,
+  // which fire on a timer regardless of how close today's progress actually is.
+  const nearGoal = targetDay === 'today' && !viewGoalReached && percent >= 85
 
   // Celebrate once per crossing — resets so a later dip-and-recross (e.g. after
   // undoing a log) can celebrate again, but a render while already over 100% won't.
@@ -174,11 +192,32 @@ export function HomePage() {
     if (goalReached && !celebratedRef.current) {
       celebratedRef.current = true
       celebrateGoalReached()
-      if (user && profile) fetchRankPoints(user.id, profile.daily_goal_ml).then(setRankPoints).catch(() => {})
+      if (user && profile) {
+        fetchRankPoints(user.id, profile.daily_goal_ml, profile.caffeine_compensation_ratio)
+          .then(setRankPoints)
+          .catch(() => {})
+      }
     } else if (!goalReached) {
       celebratedRef.current = false
     }
   }, [goalReached])
+
+  // Nudge once per crossing into the home stretch, same one-shot pattern as the
+  // goal-reached celebration above — only as a notification if already granted,
+  // never prompting from a passive background check.
+  useEffect(() => {
+    if (nearGoal && !nearGoalRef.current) {
+      nearGoalRef.current = true
+      if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+        new Notification('ใกล้ถึงเป้าหมายแล้ว!', {
+          body: `เหลืออีกแค่ ${remainingMl.toLocaleString()} ml เท่านั้น สู้ต่ออีกนิด 💪`,
+          icon: '/icons/icon-192.png',
+        })
+      }
+    } else if (!nearGoal) {
+      nearGoalRef.current = false
+    }
+  }, [nearGoal])
 
   async function handleAdd(amountMl: number) {
     if (!user || !profile || !viewDate || amountMl <= 0) return
@@ -357,6 +396,7 @@ export function HomePage() {
       <OtherDrinksCard
         userId={user!.id}
         logDate={viewDate ?? todayInTimeZone(profile.timezone)}
+        compensationRatio={profile.caffeine_compensation_ratio}
         onChange={() => viewDate && reloadOtherDrinksForDate(user!.id, viewDate)}
       />
     ),
@@ -371,7 +411,14 @@ export function HomePage() {
         </div>
       </div>
     ) : null,
-    challenge: <ChallengeCard userId={user!.id} timezone={profile.timezone} dailyGoalMl={profile.daily_goal_ml} />,
+    challenge: (
+      <ChallengeCard
+        userId={user!.id}
+        timezone={profile.timezone}
+        dailyGoalMl={profile.daily_goal_ml}
+        compensationRatio={profile.caffeine_compensation_ratio}
+      />
+    ),
   }
 
   const visibleWidgetOrder = widgetOrder.filter(
@@ -409,6 +456,13 @@ export function HomePage() {
         <div className="flex w-full max-w-sm items-center justify-center gap-2 rounded-full bg-gradient-to-r from-coral-400 to-coral-500 px-4 py-2.5 text-center text-sm font-medium text-white shadow-lg shadow-coral-500/30">
           <CheckBadgeIcon className="h-5 w-5" />
           ครบเป้าหมายวันนี้แล้ว เก่งมาก!
+        </div>
+      )}
+
+      {nearGoal && (
+        <div className="flex w-full max-w-sm items-center justify-center gap-2 rounded-full bg-sun-300/50 px-4 py-2.5 text-center text-sm font-medium text-water-700 shadow-sm">
+          <BoltIcon className="h-4 w-4 text-sun-400" />
+          เหลืออีกแค่ {remainingMl.toLocaleString()} ml เท่านั้น ใกล้ถึงแล้ว!
         </div>
       )}
 

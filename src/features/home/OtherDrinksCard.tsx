@@ -14,12 +14,13 @@ import { TakeoutCupIcon } from '../../components/DrinkIcons'
 interface OtherDrinksCardProps {
   userId: string
   logDate: string
+  compensationRatio?: number
   /** Fires after a log is added or removed, so the parent can refetch its
    *  own water-credit/goal-compensation total for this day. */
   onChange?: () => void
 }
 
-export function OtherDrinksCard({ userId, logDate, onChange }: OtherDrinksCardProps) {
+export function OtherDrinksCard({ userId, logDate, compensationRatio, onChange }: OtherDrinksCardProps) {
   const [open, setOpen] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -134,7 +135,7 @@ export function OtherDrinksCard({ userId, logDate, onChange }: OtherDrinksCardPr
       {totalMl > 0 && (
         <p className="mx-4 mb-3 rounded-2xl bg-latte-100/60 p-3 text-xs text-latte-700">
           นับเป็นน้ำ +{otherDrinkWaterCredit(totalMl).toLocaleString()} ml เข้าเป้าหมาย และเพิ่มเป้าหมายวันนี้อีก +
-          {otherDrinkGoalCompensation(totalMl).toLocaleString()} ml เพื่อชดเชยคาเฟอีน/น้ำตาล
+          {otherDrinkGoalCompensation(totalMl, compensationRatio).toLocaleString()} ml เพื่อชดเชยคาเฟอีน/น้ำตาล
         </p>
       )}
     </div>

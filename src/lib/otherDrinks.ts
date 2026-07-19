@@ -23,15 +23,28 @@ export const OTHER_DRINK_OPTIONS: { value: OtherDrinkType; label: string; amount
 export const OTHER_DRINK_WATER_CREDIT_RATIO = 0.5
 
 /** Caffeine's mild diuretic effect and sugar both call for extra plain water,
- *  so each log nudges the day's effective goal up rather than just capping the credit. */
+ *  so each log nudges the day's effective goal up rather than just capping the
+ *  credit. Tolerance varies by person, so this is a default — the real value
+ *  users see comes from their own profile.caffeine_compensation_ratio. */
 export const OTHER_DRINK_GOAL_COMPENSATION_RATIO = 0.3
+
+/** Presets for the Profile picker — "how much extra water do I personally need
+ *  per ml of coffee/tea/etc" (people who tolerate caffeine well can dial it down). */
+export const COMPENSATION_RATIO_PRESETS = [
+  { label: 'น้อย', ratio: 0.15 },
+  { label: 'กลาง', ratio: 0.3 },
+  { label: 'เยอะ', ratio: 0.45 },
+] as const
 
 export function otherDrinkWaterCredit(totalAmountMl: number): number {
   return Math.round(totalAmountMl * OTHER_DRINK_WATER_CREDIT_RATIO)
 }
 
-export function otherDrinkGoalCompensation(totalAmountMl: number): number {
-  return Math.round(totalAmountMl * OTHER_DRINK_GOAL_COMPENSATION_RATIO)
+export function otherDrinkGoalCompensation(
+  totalAmountMl: number,
+  compensationRatio: number = OTHER_DRINK_GOAL_COMPENSATION_RATIO,
+): number {
+  return Math.round(totalAmountMl * compensationRatio)
 }
 
 export async function addOtherDrinkLog(

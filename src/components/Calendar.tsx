@@ -22,9 +22,10 @@ interface CalendarProps {
   userId: string
   timezone: string
   dailyGoalMl: number
+  compensationRatio?: number
 }
 
-export function Calendar({ userId, timezone, dailyGoalMl }: CalendarProps) {
+export function Calendar({ userId, timezone, dailyGoalMl, compensationRatio }: CalendarProps) {
   const [year, setYear] = useState(() => new Date().getFullYear())
   const [month, setMonth] = useState(() => new Date().getMonth())
   const [totals, setTotals] = useState<Map<string, DailyTotal>>(new Map())
@@ -33,7 +34,7 @@ export function Calendar({ userId, timezone, dailyGoalMl }: CalendarProps) {
   useEffect(() => {
     let cancelled = false
     setLoading(true)
-    fetchMonthTotals(userId, year, month, dailyGoalMl)
+    fetchMonthTotals(userId, year, month, dailyGoalMl, compensationRatio)
       .then((result) => {
         if (!cancelled) setTotals(result)
       })
@@ -43,7 +44,7 @@ export function Calendar({ userId, timezone, dailyGoalMl }: CalendarProps) {
     return () => {
       cancelled = true
     }
-  }, [userId, year, month, dailyGoalMl])
+  }, [userId, year, month, dailyGoalMl, compensationRatio])
 
   function prevMonth() {
     if (month === 0) {

@@ -14,6 +14,7 @@ interface ChallengeCardProps {
   userId: string
   timezone: string
   dailyGoalMl: number
+  compensationRatio?: number
 }
 
 interface Progress {
@@ -22,7 +23,7 @@ interface Progress {
   status: Challenge['status']
 }
 
-export function ChallengeCard({ userId, timezone, dailyGoalMl }: ChallengeCardProps) {
+export function ChallengeCard({ userId, timezone, dailyGoalMl, compensationRatio }: ChallengeCardProps) {
   const [challenge, setChallenge] = useState<Challenge | null>(null)
   const [progress, setProgress] = useState<Progress | null>(null)
   const [loading, setLoading] = useState(true)
@@ -38,7 +39,7 @@ export function ChallengeCard({ userId, timezone, dailyGoalMl }: ChallengeCardPr
         if (cancelled) return
         setChallenge(active)
         if (active) {
-          const result = await evaluateChallenge(userId, timezone, dailyGoalMl, active)
+          const result = await evaluateChallenge(userId, timezone, dailyGoalMl, active, compensationRatio)
           if (!cancelled) setProgress(result)
         }
       } catch (err) {
@@ -52,7 +53,7 @@ export function ChallengeCard({ userId, timezone, dailyGoalMl }: ChallengeCardPr
     return () => {
       cancelled = true
     }
-  }, [userId, timezone, dailyGoalMl])
+  }, [userId, timezone, dailyGoalMl, compensationRatio])
 
   async function handleStart(days: number) {
     setStarting(true)

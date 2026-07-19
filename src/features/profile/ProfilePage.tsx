@@ -15,11 +15,12 @@ import { BmiGauge } from '../../components/BmiGauge'
 import { Select } from '../../components/Select'
 import { NumberField } from '../../components/NumberField'
 import { RankBadge } from '../../components/RankBadge'
-import { CocktailIcon } from '../../components/DrinkIcons'
+import { CocktailIcon, TakeoutCupIcon } from '../../components/DrinkIcons'
 import { useAuth } from '../../lib/AuthContext'
 import { supabase } from '../../lib/supabase'
 import { fetchProfile, updateProfile, type Profile } from '../../lib/profile'
 import { fetchRankPoints } from '../../lib/history'
+import { COMPENSATION_RATIO_PRESETS } from '../../lib/otherDrinks'
 import { ACTIVITY_OPTIONS, calculateBmi, calculateDailyGoalMl, getBmiCategory } from '../../lib/water'
 import { requestNotificationPermission, subscribeToPush, unsubscribeFromPush } from '../../lib/notifications'
 import { useInstallPrompt } from '../../lib/useInstallPrompt'
@@ -74,7 +75,7 @@ export function ProfilePage() {
   useEffect(() => {
     if (!user || !profile) return
     let cancelled = false
-    fetchRankPoints(user.id, profile.daily_goal_ml)
+    fetchRankPoints(user.id, profile.daily_goal_ml, profile.caffeine_compensation_ratio)
       .then((points) => {
         if (!cancelled) setRankPoints(points)
       })
@@ -82,7 +83,7 @@ export function ProfilePage() {
     return () => {
       cancelled = true
     }
-  }, [user, profile?.daily_goal_ml])
+  }, [user, profile?.daily_goal_ml, profile?.caffeine_compensation_ratio])
 
   async function handleSave(e?: FormEvent) {
     e?.preventDefault()
@@ -128,6 +129,12 @@ export function ProfilePage() {
   function handleAlcoholTrackingToggle(enabled: boolean) {
     setAlcoholTrackingEnabled(enabled)
     setAlcoholTrackingOn(enabled)
+  }
+
+  async function handleCompensationRatioChange(ratio: number) {
+    if (!user || !profile) return
+    const updated = await updateProfile(user.id, { caffeine_compensation_ratio: ratio })
+    setProfile(updated)
   }
 
   async function handleDailySummaryToggle(enabled: boolean) {
@@ -411,6 +418,31 @@ export function ProfilePage() {
         <p className="mt-2 text-xs text-amber-500">
           เปิดเพื่อแสดงวิดเจ็ตบันทึกแอลกอฮอล์ในหน้าหลัก
         </p>
+      </div>
+
+      <div className="w-full max-w-sm rounded-[28px] border border-latte-100 bg-gradient-to-br from-latte-50 to-white p-6 shadow-md shadow-latte-100/70">
+        <h2 className="mb-2 flex items-center gap-2 text-sm font-semibold text-latte-600">
+          <TakeoutCupIcon className="h-4 w-4 text-latte-500" fillPercent={45} />
+          ชดเชยชา/กาแฟ/น้ำหวาน
+        </h2>
+        <p className="mb-3 text-xs text-latte-500">
+          ทนคาเฟอีนได้ดี เลือกน้อยลงได้ — ค่านี้คือสัดส่วนที่เป้าหมายน้ำเพิ่มขึ้นต่อปริมาณที่ดื่ม
+        </p>
+        <div className="flex gap-2">
+          {COMPENSATION_RATIO_PRESETS.map((preset) => (
+            <button
+              key={preset.label}
+              onClick={() => handleCompensationRatioChange(preset.ratio)}
+              className={`flex-1 rounded-full py-2 text-sm font-medium transition ${
+                profile.caffeine_compensation_ratio === preset.ratio
+                  ? 'bg-latte-500 text-white shadow-md shadow-latte-500/30'
+                  : 'bg-white text-latte-600 shadow-sm hover:bg-latte-50'
+              }`}
+            >
+              {preset.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {canInstall && (
