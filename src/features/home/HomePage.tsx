@@ -131,29 +131,32 @@ export function HomePage() {
         setWidgetOrder(getWidgetOrder(user!.id))
         setHiddenWidgets(getHiddenWidgets(user!.id))
         setPresets(getCustomPresets(user!.id))
-        await syncPendingLogs(user!.id)
         const today = todayInTimeZone(loadedProfile.timezone)
         setTodayDate(today)
-        await Promise.all([reloadLogsForDate(user!.id, today), reloadOtherDrinksForDate(user!.id, today)])
-        const totals = await fetchDailyTotals(
-          user!.id,
-          loadedProfile.timezone,
-          loadedProfile.daily_goal_ml,
-          30,
-          loadedProfile.caffeine_compensation_ratio,
-        )
-        if (!cancelled) setRecentTotals(totals)
-        const points = await fetchRankPoints(
-          user!.id,
-          loadedProfile.daily_goal_ml,
-          loadedProfile.caffeine_compensation_ratio,
-        )
-        if (!cancelled) setRankPoints(points)
-        const [freezes, available] = await Promise.all([
-          fetchRecentStreakFreezes(user!.id, totals[0]?.date ?? today),
+
+        // Everything below only depends on the profile + today's date, not on
+        // each other — fire them all at once instead of one round trip at a time.
+        const thirtyDaysAgo = new Date(`${today}T00:00:00`)
+        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 29)
+        const sinceDate = thirtyDaysAgo.toISOString().slice(0, 10)
+
+        const [, , totals, points, freezes, available] = await Promise.all([
+          syncPendingLogs(user!.id).then(() => reloadLogsForDate(user!.id, today)),
+          reloadOtherDrinksForDate(user!.id, today),
+          fetchDailyTotals(
+            user!.id,
+            loadedProfile.timezone,
+            loadedProfile.daily_goal_ml,
+            30,
+            loadedProfile.caffeine_compensation_ratio,
+          ),
+          fetchRankPoints(user!.id, loadedProfile.daily_goal_ml, loadedProfile.caffeine_compensation_ratio),
+          fetchRecentStreakFreezes(user!.id, sinceDate),
           hasFreezeAvailable(user!.id, today),
         ])
         if (!cancelled) {
+          setRecentTotals(totals)
+          setRankPoints(points)
           setFrozenDates(new Set(freezes.map((f) => f.applied_date)))
           setFreezeAvailable(available)
         }
