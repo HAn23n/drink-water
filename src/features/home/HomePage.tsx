@@ -28,7 +28,12 @@ import { celebrateGoalReached } from '../../lib/celebrate'
 import { getTipOfTheDay } from '../../lib/tips'
 import { isAlcoholTrackingEnabled } from '../../lib/alcoholPref'
 import { getCustomPresets, saveCustomPresets, type CustomPreset } from '../../lib/customPresets'
-import { fetchDailyTotals, calculateStreak, type DailyTotal } from '../../lib/history'
+import { fetchDailyTotals, fetchRankPoints, calculateStreak, type DailyTotal } from '../../lib/history'
+import {
+  fetchOtherDrinkLogsForDate,
+  otherDrinkWaterCredit,
+  otherDrinkGoalCompensation,
+} from '../../lib/otherDrinks'
 import {
   getWidgetOrder,
   saveWidgetOrder,
@@ -39,9 +44,11 @@ import {
   type WidgetId,
 } from '../../lib/widgetLayout'
 import { WaveCircle } from '../../components/WaveCircle'
+import { RankBadge } from '../../components/RankBadge'
 import { PacingChecklist } from './PacingChecklist'
 import { DailySummaryModal } from './DailySummaryModal'
 import { AlcoholCard } from './AlcoholCard'
+import { OtherDrinksCard } from './OtherDrinksCard'
 import { DraggableWidget } from './DraggableWidget'
 import { ChallengeCard } from '../history/ChallengeCard'
 
@@ -70,6 +77,8 @@ export function HomePage() {
   const [presets, setPresets] = useState<CustomPreset[]>([])
   const [showSavePreset, setShowSavePreset] = useState(false)
   const [presetName, setPresetName] = useState('')
+  const [otherDrinkTotal, setOtherDrinkTotal] = useState(0)
+  const [rankPoints, setRankPoints] = useState(0)
   const celebratedRef = useRef(false)
 
   // The water totals/list on screen follow whichever day is toggled; streak/tip/alcohol
@@ -78,6 +87,11 @@ export function HomePage() {
 
   const reloadLogsForDate = useCallback(async (userId: string, date: string) => {
     setLogs(await fetchLogsForDate(userId, date))
+  }, [])
+
+  const reloadOtherDrinksForDate = useCallback(async (userId: string, date: string) => {
+    const rows = await fetchOtherDrinkLogsForDate(userId, date)
+    setOtherDrinkTotal(rows.reduce((sum, row) => sum + row.amount_ml, 0))
   }, [])
 
   useEffect(() => {
@@ -99,9 +113,11 @@ export function HomePage() {
         await syncPendingLogs(user!.id)
         const today = todayInTimeZone(loadedProfile.timezone)
         setTodayDate(today)
-        await reloadLogsForDate(user!.id, today)
+        await Promise.all([reloadLogsForDate(user!.id, today), reloadOtherDrinksForDate(user!.id, today)])
         const totals = await fetchDailyTotals(user!.id, loadedProfile.timezone, loadedProfile.daily_goal_ml, 30)
         if (!cancelled) setRecentTotals(totals)
+        const points = await fetchRankPoints(user!.id, loadedProfile.daily_goal_ml)
+        if (!cancelled) setRankPoints(points)
       } catch (err) {
         if (!cancelled) setError(err instanceof Error ? err.message : 'โหลดข้อมูลไม่สำเร็จ')
       } finally {
@@ -113,13 +129,14 @@ export function HomePage() {
     return () => {
       cancelled = true
     }
-  }, [user, navigate, reloadLogsForDate])
+  }, [user, navigate, reloadLogsForDate, reloadOtherDrinksForDate])
 
   // Refetch whenever the viewed day changes — toggling today/yesterday, or a rollover.
   useEffect(() => {
     if (!user || !viewDate) return
     reloadLogsForDate(user.id, viewDate)
-  }, [user, viewDate, reloadLogsForDate])
+    reloadOtherDrinksForDate(user.id, viewDate)
+  }, [user, viewDate, reloadLogsForDate, reloadOtherDrinksForDate])
 
   // Keep "today" honest across a midnight rollover and reconnects.
   useEffect(() => {
@@ -142,7 +159,11 @@ export function HomePage() {
   }, [user, profile, todayDate, viewDate, reloadLogsForDate])
 
   const totalMl = logs.reduce((sum, log) => sum + log.amount_ml, 0)
-  const percent = profile && profile.daily_goal_ml > 0 ? (totalMl / profile.daily_goal_ml) * 100 : 0
+  // Sweet/caffeinated drinks count at a reduced rate toward the goal, and bump the
+  // goal itself up a bit to compensate — see src/lib/otherDrinks.ts for the ratios.
+  const effectiveTotalMl = totalMl + otherDrinkWaterCredit(otherDrinkTotal)
+  const effectiveGoalMl = profile ? profile.daily_goal_ml + otherDrinkGoalCompensation(otherDrinkTotal) : 0
+  const percent = effectiveGoalMl > 0 ? (effectiveTotalMl / effectiveGoalMl) * 100 : 0
   const viewGoalReached = percent >= 100
   // Confetti/banner are about crossing today's goal specifically — not a retroactive backdate.
   const goalReached = targetDay === 'today' && viewGoalReached
@@ -153,6 +174,7 @@ export function HomePage() {
     if (goalReached && !celebratedRef.current) {
       celebratedRef.current = true
       celebrateGoalReached()
+      if (user && profile) fetchRankPoints(user.id, profile.daily_goal_ml).then(setRankPoints).catch(() => {})
     } else if (!goalReached) {
       celebratedRef.current = false
     }
@@ -324,13 +346,20 @@ export function HomePage() {
       <PacingChecklist
         reminderStart={profile.reminder_start}
         reminderEnd={profile.reminder_end}
-        dailyGoalMl={profile.daily_goal_ml}
-        totalMlSoFar={totalMl}
+        dailyGoalMl={effectiveGoalMl}
+        totalMlSoFar={effectiveTotalMl}
       />
     ),
     alcohol: alcoholEnabled ? (
       <AlcoholCard userId={user!.id} logDate={todayDate ?? todayInTimeZone(profile.timezone)} />
     ) : null,
+    otherDrinks: (
+      <OtherDrinksCard
+        userId={user!.id}
+        logDate={viewDate ?? todayInTimeZone(profile.timezone)}
+        onChange={() => viewDate && reloadOtherDrinksForDate(user!.id, viewDate)}
+      />
+    ),
     tip: todayDate ? (
       <div className="flex w-full max-w-sm items-start gap-3 rounded-3xl bg-white p-4 shadow-md shadow-water-100">
         <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-sun-300/40">
@@ -356,7 +385,13 @@ export function HomePage() {
     targetDay === 'today' && recentTotals.length > 0 && todayDate === recentTotals[recentTotals.length - 1].date
       ? [
           ...recentTotals.slice(0, -1),
-          { date: todayDate, totalMl, goalMet: totalMl >= profile.daily_goal_ml },
+          {
+            date: todayDate,
+            totalMl,
+            effectiveMl: effectiveTotalMl,
+            effectiveGoalMl,
+            goalMet: effectiveTotalMl >= effectiveGoalMl,
+          },
         ]
       : recentTotals
   const streak = calculateStreak(displayTotals)
@@ -395,8 +430,10 @@ export function HomePage() {
       <div className="relative">
         <WaveCircle
           percent={percent}
-          label={`${totalMl.toLocaleString()} / ${profile.daily_goal_ml.toLocaleString()} ml`}
-          sublabel={viewGoalReached ? 'ดื่มเกินเป้าหมายก็ได้ ดื่มต่อได้เลย' : `เหลืออีก ${Math.max(profile.daily_goal_ml - totalMl, 0)} ml`}
+          label={`${effectiveTotalMl.toLocaleString()} / ${effectiveGoalMl.toLocaleString()} ml`}
+          sublabel={
+            viewGoalReached ? 'ดื่มเกินเป้าหมายก็ได้ ดื่มต่อได้เลย' : `เหลืออีก ${Math.max(effectiveGoalMl - effectiveTotalMl, 0)} ml`
+          }
         />
         {streak > 0 && (
           <div className="absolute -left-2 -top-2 flex items-center gap-1 rounded-full bg-white px-3 py-1.5 shadow-md shadow-water-100">
@@ -404,6 +441,9 @@ export function HomePage() {
             <span className="font-display text-xs font-semibold text-coral-600">{streak} วัน</span>
           </div>
         )}
+        <div className="absolute -right-2 -top-2">
+          <RankBadge points={rankPoints} />
+        </div>
         <div className="absolute -right-2 -bottom-2 flex items-center gap-2">
           <button
             onClick={() => navigate('/history')}
@@ -604,8 +644,8 @@ export function HomePage() {
       <DailySummaryModal
         open={showSummary}
         onClose={() => setShowSummary(false)}
-        totalMl={totalMl}
-        goalMl={profile.daily_goal_ml}
+        totalMl={effectiveTotalMl}
+        goalMl={effectiveGoalMl}
         reminderStart={profile.reminder_start}
         reminderEnd={profile.reminder_end}
       />

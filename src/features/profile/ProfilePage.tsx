@@ -14,10 +14,12 @@ import { LoadingScreen, ErrorScreen } from '../../components/LoadingScreen'
 import { BmiGauge } from '../../components/BmiGauge'
 import { Select } from '../../components/Select'
 import { NumberField } from '../../components/NumberField'
+import { RankBadge } from '../../components/RankBadge'
 import { CocktailIcon } from '../../components/DrinkIcons'
 import { useAuth } from '../../lib/AuthContext'
 import { supabase } from '../../lib/supabase'
 import { fetchProfile, updateProfile, type Profile } from '../../lib/profile'
+import { fetchRankPoints } from '../../lib/history'
 import { ACTIVITY_OPTIONS, calculateBmi, calculateDailyGoalMl, getBmiCategory } from '../../lib/water'
 import { requestNotificationPermission, subscribeToPush, unsubscribeFromPush } from '../../lib/notifications'
 import { useInstallPrompt } from '../../lib/useInstallPrompt'
@@ -42,6 +44,7 @@ export function ProfilePage() {
   const [saved, setSaved] = useState(false)
   const [soundOn, setSoundOn] = useState(true)
   const [alcoholTrackingOn, setAlcoholTrackingOn] = useState(false)
+  const [rankPoints, setRankPoints] = useState(0)
 
   useEffect(() => {
     setSoundOn(isSoundEnabled())
@@ -67,6 +70,19 @@ export function ProfilePage() {
       cancelled = true
     }
   }, [user])
+
+  useEffect(() => {
+    if (!user || !profile) return
+    let cancelled = false
+    fetchRankPoints(user.id, profile.daily_goal_ml)
+      .then((points) => {
+        if (!cancelled) setRankPoints(points)
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [user, profile?.daily_goal_ml])
 
   async function handleSave(e?: FormEvent) {
     e?.preventDefault()
@@ -179,6 +195,8 @@ export function ProfilePage() {
           </div>
         </div>
       </div>
+
+      <RankBadge points={rankPoints} variant="card" />
 
       <div className="w-full max-w-sm rounded-[28px] bg-white p-6 shadow-md shadow-water-100">
         <h2 className="font-display mb-4 text-lg font-semibold text-water-700">ข้อมูลร่างกาย</h2>

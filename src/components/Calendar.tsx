@@ -5,6 +5,19 @@ import { todayInTimeZone } from '../lib/water'
 
 const WEEKDAY_LABELS = ['จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส', 'อา']
 
+/** Maps a day's progress toward its (possibly compensated) goal onto a
+ *  light→dark blue scale, so a partially-hydrated day (like today, mid-way
+ *  through) reads differently from an untouched one instead of both looking
+ *  flat gray. */
+function progressToneClasses(cell: DailyTotal): string {
+  if (cell.goalMet) return 'bg-water-600 text-white'
+  const ratio = cell.effectiveGoalMl > 0 ? cell.effectiveMl / cell.effectiveGoalMl : 0
+  if (ratio <= 0) return 'bg-slate-100 text-slate-400'
+  if (ratio < 0.4) return 'bg-water-100 text-water-600'
+  if (ratio < 0.8) return 'bg-water-300 text-water-700'
+  return 'bg-water-400 text-white'
+}
+
 interface CalendarProps {
   userId: string
   timezone: string
@@ -59,7 +72,7 @@ export function Calendar({ userId, timezone, dailyGoalMl }: CalendarProps) {
   const cells: (DailyTotal | null)[] = Array.from({ length: startWeekday }, () => null)
   for (let day = 1; day <= daysInMonth; day++) {
     const date = `${year}-${pad(month + 1)}-${pad(day)}`
-    cells.push(totals.get(date) ?? { date, totalMl: 0, goalMet: false })
+    cells.push(totals.get(date) ?? { date, totalMl: 0, effectiveMl: 0, effectiveGoalMl: dailyGoalMl, goalMet: false })
   }
 
   const monthLabel = firstOfMonth.toLocaleDateString('th-TH', { month: 'long', year: 'numeric', timeZone: 'UTC' })
@@ -98,12 +111,13 @@ export function Calendar({ userId, timezone, dailyGoalMl }: CalendarProps) {
           const isFuture = cell.date > today
           const isToday = cell.date === today
           const dayNum = Number(cell.date.slice(-2))
+          const progressClass = isFuture ? 'text-slate-300' : progressToneClasses(cell)
           return (
             <div key={cell.date} className="flex items-center justify-center py-0.5">
               <div
-                className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-medium ${
-                  isFuture ? 'text-slate-300' : cell.goalMet ? 'bg-water-500 text-white' : 'bg-slate-100 text-slate-400'
-                } ${isToday ? 'ring-2 ring-coral-400 ring-offset-1' : ''}`}
+                className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-medium ${progressClass} ${
+                  isToday ? 'ring-2 ring-coral-400 ring-offset-1' : ''
+                }`}
               >
                 {cell.goalMet && !isFuture ? <CheckIcon className="h-3.5 w-3.5" /> : dayNum}
               </div>

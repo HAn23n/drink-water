@@ -96,9 +96,9 @@ export function HistoryPage() {
     try {
       await shareProgressCard({
         displayName: profile.display_name,
-        totalMl: todayTotal.totalMl,
-        goalMl: profile.daily_goal_ml,
-        percent: profile.daily_goal_ml > 0 ? (todayTotal.totalMl / profile.daily_goal_ml) * 100 : 0,
+        totalMl: todayTotal.effectiveMl,
+        goalMl: todayTotal.effectiveGoalMl,
+        percent: todayTotal.effectiveGoalMl > 0 ? (todayTotal.effectiveMl / todayTotal.effectiveGoalMl) * 100 : 0,
         streak: longestStreak,
       })
     } catch {

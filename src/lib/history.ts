@@ -1,10 +1,31 @@
 import { supabase } from './supabase'
 import { logDateInTimeZone } from './water'
+import { otherDrinkGoalCompensation, otherDrinkWaterCredit } from './otherDrinks'
 
 export interface DailyTotal {
   date: string
+  /** Raw plain-water volume logged that day (what the charts plot). */
   totalMl: number
+  /** totalMl plus water credit from that day's sweet/caffeinated drinks — this is
+   *  what actually counts toward the goal. */
+  effectiveMl: number
+  /** The day's goal after compensation for sweet/caffeinated drinks logged. */
+  effectiveGoalMl: number
   goalMet: boolean
+}
+
+function sumByDate(rows: { log_date: string; amount_ml: number }[]): Map<string, number> {
+  const byDate = new Map<string, number>()
+  for (const row of rows) {
+    byDate.set(row.log_date, (byDate.get(row.log_date) ?? 0) + row.amount_ml)
+  }
+  return byDate
+}
+
+function toDailyTotal(date: string, waterMl: number, otherMl: number, dailyGoalMl: number): DailyTotal {
+  const effectiveMl = waterMl + otherDrinkWaterCredit(otherMl)
+  const effectiveGoalMl = dailyGoalMl + otherDrinkGoalCompensation(otherMl)
+  return { date, totalMl: waterMl, effectiveMl, effectiveGoalMl, goalMet: effectiveMl >= effectiveGoalMl }
 }
 
 export async function fetchDailyTotals(
@@ -21,23 +42,27 @@ export async function fetchDailyTotals(
     dates.push(logDateInTimeZone(d, timezone))
   }
 
-  const { data, error } = await supabase
-    .from('water_logs')
-    .select('log_date, amount_ml')
-    .eq('user_id', userId)
-    .gte('log_date', dates[0])
-    .lte('log_date', dates[dates.length - 1])
-  if (error) throw error
+  const [{ data: waterRows, error: waterError }, { data: otherRows, error: otherError }] = await Promise.all([
+    supabase
+      .from('water_logs')
+      .select('log_date, amount_ml')
+      .eq('user_id', userId)
+      .gte('log_date', dates[0])
+      .lte('log_date', dates[dates.length - 1]),
+    supabase
+      .from('other_drink_logs')
+      .select('log_date, amount_ml')
+      .eq('user_id', userId)
+      .gte('log_date', dates[0])
+      .lte('log_date', dates[dates.length - 1]),
+  ])
+  if (waterError) throw waterError
+  if (otherError) throw otherError
 
-  const totalsByDate = new Map<string, number>()
-  for (const row of data ?? []) {
-    totalsByDate.set(row.log_date, (totalsByDate.get(row.log_date) ?? 0) + row.amount_ml)
-  }
+  const waterByDate = sumByDate(waterRows ?? [])
+  const otherByDate = sumByDate(otherRows ?? [])
 
-  return dates.map((date) => {
-    const totalMl = totalsByDate.get(date) ?? 0
-    return { date, totalMl, goalMet: totalMl >= dailyGoalMl }
-  })
+  return dates.map((date) => toDailyTotal(date, waterByDate.get(date) ?? 0, otherByDate.get(date) ?? 0, dailyGoalMl))
 }
 
 /** All days in a given calendar month (UTC-anchored, matching the `log_date` column). */
@@ -53,24 +78,30 @@ export async function fetchMonthTotals(
   const startDate = `${year}-${pad(month + 1)}-01`
   const endDate = `${year}-${pad(month + 1)}-${pad(daysInMonth)}`
 
-  const { data, error } = await supabase
-    .from('water_logs')
-    .select('log_date, amount_ml')
-    .eq('user_id', userId)
-    .gte('log_date', startDate)
-    .lte('log_date', endDate)
-  if (error) throw error
+  const [{ data: waterRows, error: waterError }, { data: otherRows, error: otherError }] = await Promise.all([
+    supabase
+      .from('water_logs')
+      .select('log_date, amount_ml')
+      .eq('user_id', userId)
+      .gte('log_date', startDate)
+      .lte('log_date', endDate),
+    supabase
+      .from('other_drink_logs')
+      .select('log_date, amount_ml')
+      .eq('user_id', userId)
+      .gte('log_date', startDate)
+      .lte('log_date', endDate),
+  ])
+  if (waterError) throw waterError
+  if (otherError) throw otherError
 
-  const totalsByDate = new Map<string, number>()
-  for (const row of data ?? []) {
-    totalsByDate.set(row.log_date, (totalsByDate.get(row.log_date) ?? 0) + row.amount_ml)
-  }
+  const waterByDate = sumByDate(waterRows ?? [])
+  const otherByDate = sumByDate(otherRows ?? [])
 
   const result = new Map<string, DailyTotal>()
   for (let day = 1; day <= daysInMonth; day++) {
     const date = `${year}-${pad(month + 1)}-${pad(day)}`
-    const totalMl = totalsByDate.get(date) ?? 0
-    result.set(date, { date, totalMl, goalMet: totalMl >= dailyGoalMl })
+    result.set(date, toDailyTotal(date, waterByDate.get(date) ?? 0, otherByDate.get(date) ?? 0, dailyGoalMl))
   }
   return result
 }
@@ -88,4 +119,27 @@ export function calculateStreak(dailyTotals: DailyTotal[]): number {
     }
   }
   return streak
+}
+
+/** Total count of every day (ever) whose goal was met — used for the all-time
+ *  rank, so an off day doesn't cost progress the way a streak would. Retroactively
+ *  applies today's goal/ratios to past days, same simplification the streak and
+ *  badge tiers already make. */
+export async function fetchRankPoints(userId: string, dailyGoalMl: number): Promise<number> {
+  const [{ data: waterRows, error: waterError }, { data: otherRows, error: otherError }] = await Promise.all([
+    supabase.from('water_logs').select('log_date, amount_ml').eq('user_id', userId),
+    supabase.from('other_drink_logs').select('log_date, amount_ml').eq('user_id', userId),
+  ])
+  if (waterError) throw waterError
+  if (otherError) throw otherError
+
+  const waterByDate = sumByDate(waterRows ?? [])
+  const otherByDate = sumByDate(otherRows ?? [])
+  const allDates = new Set([...waterByDate.keys(), ...otherByDate.keys()])
+
+  let points = 0
+  for (const date of allDates) {
+    if (toDailyTotal(date, waterByDate.get(date) ?? 0, otherByDate.get(date) ?? 0, dailyGoalMl).goalMet) points++
+  }
+  return points
 }
