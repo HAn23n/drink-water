@@ -13,6 +13,8 @@ import {
   XMarkIcon,
   ChartBarIcon,
   BoltIcon,
+  ShieldCheckIcon,
+  FaceSmileIcon,
 } from '@heroicons/react/24/outline'
 import { CheckBadgeIcon, FireIcon } from '@heroicons/react/24/solid'
 import { LoadingScreen, ErrorScreen } from '../../components/LoadingScreen'
@@ -24,17 +26,24 @@ import { fetchProfile, type Profile } from '../../lib/profile'
 import { addWaterLog, deleteWaterLog, fetchLogsForDate, syncPendingLogs, type WaterLog } from '../../lib/waterLogs'
 import { removeFromQueue } from '../../lib/offlineQueue'
 import { todayInTimeZone, yesterdayInTimeZone } from '../../lib/water'
-import { playAddSound } from '../../lib/sound'
-import { celebrateGoalReached } from '../../lib/celebrate'
-import { getTipOfTheDay } from '../../lib/tips'
+import { playAddSound, playRankUpSound } from '../../lib/sound'
+import { celebrateGoalReached, celebrateRankUp } from '../../lib/celebrate'
+import { getTipOfTheDay, getMissDayQuip } from '../../lib/tips'
 import { isAlcoholTrackingEnabled } from '../../lib/alcoholPref'
 import { getCustomPresets, saveCustomPresets, type CustomPreset } from '../../lib/customPresets'
 import { fetchDailyTotals, fetchRankPoints, calculateStreak, type DailyTotal } from '../../lib/history'
+import { getRank } from '../../lib/rank'
 import {
   fetchOtherDrinkLogsForDate,
   otherDrinkWaterCredit,
   otherDrinkGoalCompensation,
 } from '../../lib/otherDrinks'
+import {
+  fetchRecentStreakFreezes,
+  hasFreezeAvailable,
+  useStreakFreeze,
+  findBrokenStreakDay,
+} from '../../lib/streakFreeze'
 import {
   getWidgetOrder,
   saveWidgetOrder,
@@ -80,8 +89,12 @@ export function HomePage() {
   const [presetName, setPresetName] = useState('')
   const [otherDrinkTotal, setOtherDrinkTotal] = useState(0)
   const [rankPoints, setRankPoints] = useState(0)
+  const [frozenDates, setFrozenDates] = useState<Set<string>>(new Set())
+  const [freezeAvailable, setFreezeAvailable] = useState(false)
+  const [freezing, setFreezing] = useState(false)
   const celebratedRef = useRef(false)
   const nearGoalRef = useRef(false)
+  const prevRankTierRef = useRef<number | null>(null)
 
   // The water totals/list on screen follow whichever day is toggled; streak/tip/alcohol
   // always stay pinned to the real "today" regardless of what's being viewed/backdated.
@@ -130,6 +143,14 @@ export function HomePage() {
           loadedProfile.caffeine_compensation_ratio,
         )
         if (!cancelled) setRankPoints(points)
+        const [freezes, available] = await Promise.all([
+          fetchRecentStreakFreezes(user!.id, totals[0]?.date ?? today),
+          hasFreezeAvailable(user!.id, today),
+        ])
+        if (!cancelled) {
+          setFrozenDates(new Set(freezes.map((f) => f.applied_date)))
+          setFreezeAvailable(available)
+        }
       } catch (err) {
         if (!cancelled) setError(err instanceof Error ? err.message : 'โหลดข้อมูลไม่สำเร็จ')
       } finally {
@@ -219,6 +240,18 @@ export function HomePage() {
     }
   }, [nearGoal])
 
+  // Celebrate an actual tier increase — skipped on the very first load, since
+  // that's just reporting existing rank, not a fresh promotion.
+  useEffect(() => {
+    const tier = getRank(rankPoints).tier
+    if (prevRankTierRef.current !== null && tier > prevRankTierRef.current) {
+      celebrateRankUp()
+      playRankUpSound()
+      if (navigator.vibrate) navigator.vibrate([80, 40, 80, 40, 160])
+    }
+    prevRankTierRef.current = tier
+  }, [rankPoints])
+
   async function handleAdd(amountMl: number) {
     if (!user || !profile || !viewDate || amountMl <= 0) return
     try {
@@ -256,6 +289,20 @@ export function HomePage() {
       await reloadLogsForDate(user.id, viewDate)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'เลิกทำไม่สำเร็จ')
+    }
+  }
+
+  async function handleUseFreeze() {
+    if (!user || !brokenDay || freezing) return
+    setFreezing(true)
+    try {
+      await useStreakFreeze(user.id, brokenDay)
+      setFrozenDates((prev) => new Set(prev).add(brokenDay))
+      setFreezeAvailable(false)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'ใช้ตั๋วพักแรงค์ไม่สำเร็จ')
+    } finally {
+      setFreezing(false)
     }
   }
 
@@ -441,7 +488,23 @@ export function HomePage() {
           },
         ]
       : recentTotals
-  const streak = calculateStreak(displayTotals)
+  const streak = calculateStreak(displayTotals, frozenDates)
+  // Only offer a freeze for a recent miss (within the last week) — an older gap
+  // isn't what "1 per week" is meant to patch over.
+  const brokenDay = findBrokenStreakDay(displayTotals, frozenDates)
+  const canOfferFreeze =
+    targetDay === 'today' &&
+    freezeAvailable &&
+    brokenDay !== null &&
+    todayDate !== null &&
+    (new Date(todayDate).getTime() - new Date(brokenDay).getTime()) / 86_400_000 <= 7
+
+  // A light, friendly nudge instead of silence when yesterday came up short —
+  // skipped if a freeze already protects it, since that's not really a miss anymore.
+  const yesterdayDate = profile ? yesterdayInTimeZone(profile.timezone) : null
+  const yesterdayTotal = yesterdayDate ? recentTotals.find((t) => t.date === yesterdayDate) : undefined
+  const showMissQuip =
+    targetDay === 'today' && yesterdayTotal !== undefined && !yesterdayTotal.goalMet && !frozenDates.has(yesterdayDate!)
 
   return (
     <div className="flex min-h-full flex-col items-center gap-6 bg-water-50 px-6 py-10">
@@ -463,6 +526,30 @@ export function HomePage() {
         <div className="flex w-full max-w-sm items-center justify-center gap-2 rounded-full bg-sun-300/50 px-4 py-2.5 text-center text-sm font-medium text-water-700 shadow-sm">
           <BoltIcon className="h-4 w-4 text-sun-400" />
           เหลืออีกแค่ {remainingMl.toLocaleString()} ml เท่านั้น ใกล้ถึงแล้ว!
+        </div>
+      )}
+
+      {canOfferFreeze && brokenDay && (
+        <div className="flex w-full max-w-sm items-center justify-between gap-3 rounded-2xl bg-water-100 px-4 py-3 text-water-700 shadow-sm">
+          <span className="flex items-center gap-2 text-xs">
+            <ShieldCheckIcon className="h-5 w-5 flex-shrink-0 text-water-500" />
+            พลาดไป {new Date(`${brokenDay}T00:00:00`).toLocaleDateString('th-TH', { day: 'numeric', month: 'short' })} —
+            ใช้ตั๋วพักแรงค์กู้ streak ได้นะ (1 ครั้ง/สัปดาห์)
+          </span>
+          <button
+            onClick={handleUseFreeze}
+            disabled={freezing}
+            className="flex-shrink-0 rounded-full bg-water-500 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-water-600 disabled:opacity-50"
+          >
+            ใช้เลย
+          </button>
+        </div>
+      )}
+
+      {showMissQuip && todayDate && (
+        <div className="flex w-full max-w-sm items-center gap-2 rounded-2xl bg-coral-100 px-4 py-3 text-xs text-coral-600">
+          <FaceSmileIcon className="h-5 w-5 flex-shrink-0 text-coral-400" />
+          {getMissDayQuip(todayDate)}
         </div>
       )}
 

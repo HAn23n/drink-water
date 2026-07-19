@@ -1,13 +1,37 @@
-import { TrophyIcon } from '@heroicons/react/24/solid'
-import { getRank } from '../lib/rank'
+import { useState } from 'react'
+import { TrophyIcon, ShareIcon } from '@heroicons/react/24/solid'
+import { getRank, RANK_TIERS } from '../lib/rank'
+import { shareRankCard } from '../lib/shareCard'
 
 interface RankBadgeProps {
   points: number
   variant?: 'compact' | 'card'
+  /** Only used by the 'card' variant's share button. */
+  displayName?: string
 }
 
-export function RankBadge({ points, variant = 'compact' }: RankBadgeProps) {
+export function RankBadge({ points, variant = 'compact', displayName }: RankBadgeProps) {
   const rank = getRank(points)
+  const [sharing, setSharing] = useState(false)
+
+  async function handleShare() {
+    setSharing(true)
+    try {
+      await shareRankCard({
+        displayName: displayName ?? '',
+        rankName: rank.name,
+        tier: rank.tier,
+        totalTiers: RANK_TIERS.length,
+        points: rank.points,
+        nextTierPoints: rank.nextTierPoints,
+        progressRatio: rank.progressRatio,
+      })
+    } catch {
+      // User cancelling the native share sheet also rejects — not a real error, ignore.
+    } finally {
+      setSharing(false)
+    }
+  }
 
   if (variant === 'compact') {
     return (
@@ -29,6 +53,14 @@ export function RankBadge({ points, variant = 'compact' }: RankBadgeProps) {
           <p className="font-display text-lg font-semibold text-water-700">{rank.name}</p>
           <p className="text-xs text-slate-400">{rank.points.toLocaleString()} คะแนนสะสม</p>
         </div>
+        <button
+          onClick={handleShare}
+          disabled={sharing}
+          aria-label="แชร์แรงค์"
+          className="flex-shrink-0 rounded-full bg-water-50 p-2.5 text-water-600 transition hover:bg-water-100 disabled:opacity-50"
+        >
+          <ShareIcon className="h-4 w-4" />
+        </button>
       </div>
       <div className="mt-4">
         <div className="h-2 w-full overflow-hidden rounded-full bg-water-50">

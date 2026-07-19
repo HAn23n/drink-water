@@ -203,7 +203,7 @@ export function ProfilePage() {
         </div>
       </div>
 
-      <RankBadge points={rankPoints} variant="card" />
+      <RankBadge points={rankPoints} variant="card" displayName={profile.display_name} />
 
       <div className="w-full max-w-sm rounded-[28px] bg-white p-6 shadow-md shadow-water-100">
         <h2 className="font-display mb-4 text-lg font-semibold text-water-700">ข้อมูลร่างกาย</h2>

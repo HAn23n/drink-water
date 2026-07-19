@@ -195,3 +195,187 @@ export async function shareProgressCard(data: ShareCardData): Promise<void> {
   a.click()
   URL.revokeObjectURL(url)
 }
+
+export interface RankCardData {
+  displayName: string
+  rankName: string
+  tier: number
+  totalTiers: number
+  points: number
+  nextTierPoints: number | null
+  progressRatio: number
+}
+
+async function generateRankCardBlob(data: RankCardData): Promise<Blob> {
+  await document.fonts.ready
+
+  const W = 1080
+  const H = 1350
+  const maxed = data.tier >= data.totalTiers
+  const canvas = document.createElement('canvas')
+  canvas.width = W
+  canvas.height = H
+  const ctx = canvas.getContext('2d')
+  if (!ctx) throw new Error('canvas not supported')
+
+  // Top-tier gets the same gold/coral treatment as its RankBadge; everyone
+  // else gets the usual water-forward blue.
+  const bg = ctx.createLinearGradient(0, 0, W, H)
+  if (maxed) {
+    bg.addColorStop(0, '#f0603d')
+    bg.addColorStop(0.55, '#ff7a59')
+    bg.addColorStop(1, '#ffc857')
+  } else {
+    bg.addColorStop(0, '#06b6d4')
+    bg.addColorStop(0.5, '#3b82f6')
+    bg.addColorStop(1, '#6366f1')
+  }
+  ctx.fillStyle = bg
+  ctx.fillRect(0, 0, W, H)
+
+  const blob = (cx: number, cy: number, r: number, color: string) => {
+    const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, r)
+    g.addColorStop(0, color)
+    g.addColorStop(1, 'rgba(0,0,0,0)')
+    ctx.fillStyle = g
+    ctx.fillRect(0, 0, W, H)
+  }
+  blob(920, 180, 520, maxed ? 'rgba(255,255,255,0.35)' : 'rgba(244,114,182,0.55)')
+  blob(120, 1180, 560, maxed ? 'rgba(255,255,255,0.25)' : 'rgba(34,211,238,0.5)')
+
+  for (let i = 0; i < 1600; i++) {
+    ctx.fillStyle = Math.random() > 0.5 ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)'
+    ctx.fillRect(Math.random() * W, Math.random() * H, 2, 2)
+  }
+
+  ctx.textAlign = 'center'
+
+  const spacing = ctx as CanvasRenderingContext2D & { letterSpacing?: string }
+  const badge = 'DRINK WATER'
+  ctx.font = "600 30px Kanit, sans-serif"
+  spacing.letterSpacing = '3px'
+  const textW = ctx.measureText(badge).width
+  const dropW = 26
+  const badgeGap = 14
+  const groupW = dropW + badgeGap + textW
+  const pillW = groupW + 80
+  ctx.fillStyle = 'rgba(255,255,255,0.18)'
+  roundRect(ctx, W / 2 - pillW / 2, 74, pillW, 62, 31)
+  ctx.fill()
+  const groupX = W / 2 - groupW / 2
+  drawDroplet(ctx, groupX + dropW / 2, 106, 34, '#ffffff')
+  ctx.fillStyle = '#ffffff'
+  ctx.textAlign = 'left'
+  ctx.fillText(badge, groupX + dropW + badgeGap, 116)
+  ctx.textAlign = 'center'
+  spacing.letterSpacing = '0px'
+
+  ctx.fillStyle = '#ffffff'
+  ctx.font = "700 52px Kanit, 'IBM Plex Sans Thai', sans-serif"
+  ctx.fillText(data.displayName || 'Drink Water', W / 2, 226)
+  ctx.font = "500 32px 'IBM Plex Sans Thai', sans-serif"
+  ctx.fillStyle = 'rgba(255,255,255,0.82)'
+  ctx.fillText(`แรงค์ ${data.tier}/${data.totalTiers}`, W / 2, 276)
+
+  // Hero rank name — sized down a step from a % so long Thai names still fit.
+  ctx.save()
+  ctx.shadowColor = 'rgba(3,20,60,0.35)'
+  ctx.shadowBlur = 36
+  ctx.shadowOffsetY = 14
+  ctx.fillStyle = '#ffffff'
+  ctx.font = "800 108px Kanit, 'IBM Plex Sans Thai', sans-serif"
+  ctx.fillText(data.rankName, W / 2, 480)
+  ctx.restore()
+
+  ctx.font = "500 36px 'IBM Plex Sans Thai', sans-serif"
+  ctx.fillStyle = 'rgba(255,255,255,0.9)'
+  ctx.fillText(`${data.points.toLocaleString()} คะแนนสะสม`, W / 2, 560)
+
+  // Progress pill toward the next tier (full + no knob once maxed).
+  const barX = 100
+  const barY = 632
+  const barW = W - 200
+  const barH = 44
+  const barR = 22
+  ctx.fillStyle = 'rgba(255,255,255,0.25)'
+  roundRect(ctx, barX, barY, barW, barH, barR)
+  ctx.fill()
+  const frac = Math.max(0.04, Math.min(data.progressRatio, 1))
+  const fillW = barW * frac
+  const fg = ctx.createLinearGradient(barX, 0, barX + barW, 0)
+  fg.addColorStop(0, '#ffffff')
+  fg.addColorStop(1, maxed ? '#fff3d6' : '#bff3ff')
+  ctx.fillStyle = fg
+  roundRect(ctx, barX, barY, fillW, barH, barR)
+  ctx.fill()
+  if (!maxed) {
+    ctx.save()
+    ctx.beginPath()
+    ctx.arc(barX + fillW, barY + barH / 2, 34, 0, Math.PI * 2)
+    ctx.fillStyle = '#ffffff'
+    ctx.shadowColor = 'rgba(3,20,60,0.3)'
+    ctx.shadowBlur = 16
+    ctx.fill()
+    ctx.restore()
+    drawDroplet(ctx, barX + fillW, barY + barH / 2, 30, '#3b82f6')
+  }
+
+  ctx.font = "500 30px 'IBM Plex Sans Thai', sans-serif"
+  ctx.fillStyle = 'rgba(255,255,255,0.9)'
+  ctx.fillText(
+    maxed || data.nextTierPoints === null
+      ? 'แรงค์สูงสุดแล้ว 👑'
+      : `อีก ${(data.nextTierPoints - data.points).toLocaleString()} คะแนนถึงแรงค์ถัดไป`,
+    W / 2,
+    720,
+  )
+
+  // Trophy-style badge instead of the two water stat cards.
+  const cardY = 800
+  const cardH = 300
+  const cardW = W - 200
+  ctx.fillStyle = 'rgba(255,255,255,0.16)'
+  roundRect(ctx, 100, cardY, cardW, cardH, 48)
+  ctx.fill()
+  ctx.lineWidth = 2
+  ctx.strokeStyle = 'rgba(255,255,255,0.25)'
+  roundRect(ctx, 100, cardY, cardW, cardH, 48)
+  ctx.stroke()
+  drawDroplet(ctx, W / 2, cardY + 130, 130, '#ffffff')
+  ctx.font = "600 34px Kanit, sans-serif"
+  ctx.fillStyle = '#ffffff'
+  ctx.fillText('ดื่มน้ำครบเป้าหมายทุกวัน', W / 2, cardY + 240)
+  ctx.fillStyle = 'rgba(255,255,255,0.85)'
+  ctx.font = "500 28px 'IBM Plex Sans Thai', sans-serif"
+  ctx.fillText('สะสมคะแนนไปเรื่อยๆ ไม่ต้องติดกันก็ได้', W / 2, cardY + 278)
+
+  ctx.font = "500 30px 'IBM Plex Sans Thai', sans-serif"
+  ctx.fillStyle = 'rgba(255,255,255,0.7)'
+  ctx.fillText('ดื่มน้ำให้ครบ แล้วมาแชร์กัน 💦', W / 2, 1290)
+
+  return new Promise((resolve, reject) => {
+    canvas.toBlob((blob) => (blob ? resolve(blob) : reject(new Error('canvas.toBlob failed'))), 'image/png')
+  })
+}
+
+/** Shares via the Web Share API when available (mobile), otherwise downloads the PNG. */
+export async function shareRankCard(data: RankCardData): Promise<void> {
+  const blob = await generateRankCardBlob(data)
+  const file = new File([blob], 'drink-water-rank.png', { type: 'image/png' })
+
+  if (navigator.canShare?.({ files: [file] })) {
+    await navigator.share({
+      files: [file],
+      title: 'Drink Water',
+      text: `แรงค์ของฉันคือ ${data.rankName}!`,
+    })
+    return
+  }
+
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = 'drink-water-rank.png'
+  a.click()
+  URL.revokeObjectURL(url)
+}

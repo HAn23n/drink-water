@@ -32,3 +32,23 @@ export function getTipOfTheDay(logDate: string): string {
 
 export const HYDRATION_TIP_AFTER_ALCOHOL =
   'แอลกอฮอล์ทำให้ร่างกายขับน้ำออกมากกว่าปกติ ลองดื่มน้ำเพิ่มอีกสักแก้วนะ'
+
+const MISS_DAY_QUIPS = [
+  'เมื่อวานหลุดไปหน่อย ไม่เป็นไรน้า วันนี้ลุยใหม่!',
+  'อุ๊ย เมื่อวานพลาดไปนิดนึง 555 ไม่ซีเรียส มาต่อกันวันนี้',
+  'เมื่อวานยุ่งจนลืมน้ำ เข้าใจอยู่ วันนี้ตั้งใจใหม่ได้นะ',
+  'พลาดไปวันเดียวไม่ใช่โลกถล่ม ดื่มน้ำต่อกันวันนี้เลย',
+  'เมื่อวานติดลมไปหน่อย วันนี้กลับมาฟอร์มเดิมกันเถอะ',
+  'เมื่อวานคะแนนตกไปนิด วันนี้ไต่กลับมาได้สบายมาก',
+  'ร่างกายไม่โกรธหรอกที่พลาดไปวันนึง ดื่มน้ำต่อเลย!',
+  'เมื่อวานหลุดโฟกัสไปหน่อย วันนี้โฟกัสกลับมาได้',
+]
+
+/** Stable within a calendar day, so it doesn't change on every re-render. */
+export function getMissDayQuip(dateStr: string): string {
+  let hash = 0
+  for (let i = 0; i < dateStr.length; i++) {
+    hash = (hash * 31 + dateStr.charCodeAt(i)) >>> 0
+  }
+  return MISS_DAY_QUIPS[hash % MISS_DAY_QUIPS.length]
+}

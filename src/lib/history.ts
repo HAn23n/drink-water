@@ -120,12 +120,14 @@ export async function fetchMonthTotals(
 }
 
 /** Consecutive goal-met days counting back from today. Today doesn't break the
- *  streak while unmet, since the day isn't over yet. */
-export function calculateStreak(dailyTotals: DailyTotal[]): number {
+ *  streak while unmet, since the day isn't over yet. A date in `frozenDates`
+ *  (a used streak freeze) counts as met for continuity purposes only. */
+export function calculateStreak(dailyTotals: DailyTotal[], frozenDates?: Set<string>): number {
   let streak = 0
   for (let i = dailyTotals.length - 1; i >= 0; i--) {
     const isToday = i === dailyTotals.length - 1
-    if (dailyTotals[i].goalMet) {
+    const day = dailyTotals[i]
+    if (day.goalMet || frozenDates?.has(day.date)) {
       streak++
     } else if (!isToday) {
       break
