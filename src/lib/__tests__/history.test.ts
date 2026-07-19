@@ -2,7 +2,13 @@ import { describe, expect, it } from 'vitest'
 import { calculateStreak, type DailyTotal } from '../history'
 
 function day(totalMl: number, goalMet: boolean): DailyTotal {
-  return { date: '2026-01-01', totalMl, goalMet }
+  return {
+    date: '2026-01-01',
+    totalMl,
+    effectiveMl: totalMl,
+    effectiveGoalMl: goalMet ? totalMl : totalMl + 1,
+    goalMet,
+  }
 }
 
 describe('calculateStreak', () => {

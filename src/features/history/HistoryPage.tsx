@@ -6,7 +6,8 @@ import { Calendar } from '../../components/Calendar'
 import { ChallengeCard } from './ChallengeCard'
 import { useAuth } from '../../lib/AuthContext'
 import { fetchProfile, updateProfile, type Profile } from '../../lib/profile'
-import { calculateStreak, fetchDailyTotals, type DailyTotal } from '../../lib/history'
+import { calculateStreak, fetchDailyTotals, fetchMonthlyAverages, type DailyTotal, type MonthlyAverage } from '../../lib/history'
+import { fetchRecentStreakFreezes } from '../../lib/streakFreeze'
 import { shareProgressCard } from '../../lib/shareCard'
 
 const RANGE_OPTIONS = [7, 14, 30] as const
@@ -26,6 +27,8 @@ export function HistoryPage() {
   const { user } = useAuth()
   const [profile, setProfile] = useState<Profile | null>(null)
   const [allTotals, setAllTotals] = useState<DailyTotal[]>([])
+  const [frozenDates, setFrozenDates] = useState<Set<string>>(new Set())
+  const [monthlyAverages, setMonthlyAverages] = useState<MonthlyAverage[]>([])
   const [rangeDays, setRangeDays] = useState<RangeDays>(7)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -42,8 +45,26 @@ export function HistoryPage() {
         setProfile(loadedProfile)
         // Always fetch enough history to evaluate the longest badge tier,
         // then slice down to whatever range the user has selected to view.
-        const totals = await fetchDailyTotals(user!.id, loadedProfile.timezone, loadedProfile.daily_goal_ml, 100)
+        const totals = await fetchDailyTotals(
+          user!.id,
+          loadedProfile.timezone,
+          loadedProfile.daily_goal_ml,
+          100,
+          loadedProfile.caffeine_compensation_ratio,
+        )
         if (!cancelled) setAllTotals(totals)
+        if (totals.length > 0) {
+          const freezes = await fetchRecentStreakFreezes(user!.id, totals[0].date)
+          if (!cancelled) setFrozenDates(new Set(freezes.map((f) => f.applied_date)))
+        }
+        const monthly = await fetchMonthlyAverages(
+          user!.id,
+          loadedProfile.timezone,
+          loadedProfile.daily_goal_ml,
+          6,
+          loadedProfile.caffeine_compensation_ratio,
+        )
+        if (!cancelled) setMonthlyAverages(monthly)
       } catch (err) {
         if (!cancelled) setError(err instanceof Error ? err.message : 'โหลดข้อมูลไม่สำเร็จ')
       } finally {
@@ -57,7 +78,7 @@ export function HistoryPage() {
     }
   }, [user])
 
-  const streak = calculateStreak(allTotals)
+  const streak = calculateStreak(allTotals, frozenDates)
 
   // Persist a new personal-best streak so badges stay unlocked after it later breaks.
   useEffect(() => {
@@ -96,9 +117,9 @@ export function HistoryPage() {
     try {
       await shareProgressCard({
         displayName: profile.display_name,
-        totalMl: todayTotal.totalMl,
-        goalMl: profile.daily_goal_ml,
-        percent: profile.daily_goal_ml > 0 ? (todayTotal.totalMl / profile.daily_goal_ml) * 100 : 0,
+        totalMl: todayTotal.effectiveMl,
+        goalMl: todayTotal.effectiveGoalMl,
+        percent: todayTotal.effectiveGoalMl > 0 ? (todayTotal.effectiveMl / todayTotal.effectiveGoalMl) * 100 : 0,
         streak: longestStreak,
       })
     } catch {
@@ -179,10 +200,20 @@ export function HistoryPage() {
         </div>
       </div>
 
-      <ChallengeCard userId={user!.id} timezone={profile.timezone} dailyGoalMl={profile.daily_goal_ml} />
+      <ChallengeCard
+        userId={user!.id}
+        timezone={profile.timezone}
+        dailyGoalMl={profile.daily_goal_ml}
+        compensationRatio={profile.caffeine_compensation_ratio}
+      />
 
       <div className="rounded-3xl bg-white p-4 shadow-md shadow-water-100">
-        <Calendar userId={user!.id} timezone={profile.timezone} dailyGoalMl={profile.daily_goal_ml} />
+        <Calendar
+          userId={user!.id}
+          timezone={profile.timezone}
+          dailyGoalMl={profile.daily_goal_ml}
+          compensationRatio={profile.caffeine_compensation_ratio}
+        />
 
         <div className="my-4 border-t border-slate-100" />
 
@@ -202,6 +233,26 @@ export function HistoryPage() {
           </BarChart>
         </ResponsiveContainer>
       </div>
+
+      {monthlyAverages.length > 0 && (
+        <div className="rounded-3xl bg-white p-4 shadow-md shadow-water-100">
+          <h2 className="mb-3 text-sm font-medium text-slate-500">ค่าเฉลี่ยรายเดือน (6 เดือนล่าสุด)</h2>
+          <ResponsiveContainer width="100%" height={200}>
+            <BarChart data={monthlyAverages} margin={{ top: 4, right: 8, left: -16, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e4e7" />
+              <XAxis dataKey="label" tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} />
+              <YAxis tick={{ fontSize: 12, fill: '#64748b' }} axisLine={false} tickLine={false} />
+              <ReferenceLine y={profile.daily_goal_ml} stroke="#0b4f73" strokeDasharray="4 4" />
+              <Tooltip formatter={(value) => [`${Number(value).toLocaleString()} ml/วัน`, 'เฉลี่ย']} />
+              <Bar dataKey="avgMl" radius={[8, 8, 0, 0]}>
+                {monthlyAverages.map((entry) => (
+                  <Cell key={entry.month} fill={entry.avgMl >= entry.avgEffectiveGoalMl ? '#17b4e0' : '#cfeef9'} />
+                ))}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      )}
     </div>
   )
 }

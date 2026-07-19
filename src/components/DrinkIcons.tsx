@@ -113,3 +113,24 @@ export function CocktailIcon({ className, fillPercent = 50 }: DrinkIconProps) {
     </svg>
   )
 }
+
+// A takeaway cup with a straw — for coffee, tea, milk tea, smoothies, etc.
+const CUP_PATH = 'M6 8 H18 L16.6 20.3 a2 2 0 0 1-2 1.7 H9.4 a2 2 0 0 1-2-1.7 Z'
+const LID_PATH = 'M4.5 6 a1.2 1.2 0 0 1 1.2-1.2 h12.6 a1.2 1.2 0 0 1 1.2 1.2 v1.3 H4.5 Z'
+
+export function TakeoutCupIcon({ className, fillPercent = 55 }: DrinkIconProps) {
+  const clipId = useId()
+  const fillY = 8 + (20.3 - 8) * (1 - fillPercent / 100)
+
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className={className}>
+      <clipPath id={clipId}>
+        <path d={CUP_PATH} />
+      </clipPath>
+      <rect x="0" y={fillY} width="24" height="24" clipPath={`url(#${clipId})`} fill="currentColor" opacity="0.4" />
+      <path d={CUP_PATH} stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
+      <path d={LID_PATH} fill="currentColor" opacity="0.9" />
+      <path d="M14.5 5 L15.8 1.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+    </svg>
+  )
+}

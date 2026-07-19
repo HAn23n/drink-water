@@ -35,6 +35,16 @@
   --color-mint-500: #22a873;
   --color-mint-600: #16855a;
 
+  /* Latte — reserved for the sweet/caffeinated-drinks widget (coffee, tea, milk
+     tea, smoothies): a muted coffee-with-milk brown, distinct from amber's
+     warmer alcohol orange so the two "record, don't fully count" zones don't blur */
+  --color-latte-50: #f7f1ea;
+  --color-latte-100: #ead9c3;
+  --color-latte-300: #c9a37c;
+  --color-latte-400: #a97c52;
+  --color-latte-500: #8a5f3d;
+  --color-latte-600: #6b4730;
+
   --font-display: 'Kanit', system-ui, sans-serif;
   --font-body: 'IBM Plex Sans Thai', system-ui, sans-serif;
 }

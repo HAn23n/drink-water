@@ -13,10 +13,15 @@ import {
 import { LoadingScreen, ErrorScreen } from '../../components/LoadingScreen'
 import { BmiGauge } from '../../components/BmiGauge'
 import { Select } from '../../components/Select'
-import { CocktailIcon } from '../../components/DrinkIcons'
+import { NumberField } from '../../components/NumberField'
+import { RankBadge } from '../../components/RankBadge'
+import { CocktailIcon, TakeoutCupIcon } from '../../components/DrinkIcons'
 import { useAuth } from '../../lib/AuthContext'
 import { supabase } from '../../lib/supabase'
 import { fetchProfile, updateProfile, type Profile } from '../../lib/profile'
+import { fetchRankPoints } from '../../lib/history'
+import { syncDisplayNameAcrossGroups } from '../../lib/groups'
+import { COMPENSATION_RATIO_PRESETS } from '../../lib/otherDrinks'
 import { ACTIVITY_OPTIONS, calculateBmi, calculateDailyGoalMl, getBmiCategory } from '../../lib/water'
 import { requestNotificationPermission, subscribeToPush, unsubscribeFromPush } from '../../lib/notifications'
 import { useInstallPrompt } from '../../lib/useInstallPrompt'
@@ -41,6 +46,7 @@ export function ProfilePage() {
   const [saved, setSaved] = useState(false)
   const [soundOn, setSoundOn] = useState(true)
   const [alcoholTrackingOn, setAlcoholTrackingOn] = useState(false)
+  const [rankPoints, setRankPoints] = useState(0)
 
   useEffect(() => {
     setSoundOn(isSoundEnabled())
@@ -67,6 +73,19 @@ export function ProfilePage() {
     }
   }, [user])
 
+  useEffect(() => {
+    if (!user || !profile) return
+    let cancelled = false
+    fetchRankPoints(user.id, profile.daily_goal_ml, profile.caffeine_compensation_ratio)
+      .then((points) => {
+        if (!cancelled) setRankPoints(points)
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [user, profile?.daily_goal_ml, profile?.caffeine_compensation_ratio])
+
   async function handleSave(e?: FormEvent) {
     e?.preventDefault()
     if (!user || !profile) return
@@ -76,6 +95,7 @@ export function ProfilePage() {
     try {
       const updated = await updateProfile(user.id, profile)
       setProfile(updated)
+      syncDisplayNameAcrossGroups(user.id, updated.display_name).catch(() => {})
       setSaved(true)
       setTimeout(() => setSaved(false), 2000)
     } catch (err) {
@@ -111,6 +131,12 @@ export function ProfilePage() {
   function handleAlcoholTrackingToggle(enabled: boolean) {
     setAlcoholTrackingEnabled(enabled)
     setAlcoholTrackingOn(enabled)
+  }
+
+  async function handleCompensationRatioChange(ratio: number) {
+    if (!user || !profile) return
+    const updated = await updateProfile(user.id, { caffeine_compensation_ratio: ratio })
+    setProfile(updated)
   }
 
   async function handleDailySummaryToggle(enabled: boolean) {
@@ -179,6 +205,8 @@ export function ProfilePage() {
         </div>
       </div>
 
+      <RankBadge points={rankPoints} variant="card" displayName={profile.display_name} />
+
       <div className="w-full max-w-sm rounded-[28px] bg-white p-6 shadow-md shadow-water-100">
         <h2 className="font-display mb-4 text-lg font-semibold text-water-700">ข้อมูลร่างกาย</h2>
 
@@ -197,10 +225,13 @@ export function ProfilePage() {
               น้ำหนัก (kg)
               <div className="relative">
                 <ScaleIcon className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-water-400" />
-                <input
-                  type="number"
-                  value={profile.weight_kg ?? ''}
-                  onChange={(e) => setProfile({ ...profile, weight_kg: Number(e.target.value) })}
+                <NumberField
+                  value={profile.weight_kg}
+                  nullable
+                  decimal
+                  min={20}
+                  max={300}
+                  onChange={(v) => setProfile({ ...profile, weight_kg: v })}
                   className="w-full min-w-0 rounded-2xl border border-slate-200 py-2.5 pl-9 pr-3 outline-none transition focus:border-water-500 focus:ring-4 focus:ring-water-100"
                 />
               </div>
@@ -209,10 +240,12 @@ export function ProfilePage() {
               ส่วนสูง (cm)
               <div className="relative">
                 <ArrowsUpDownIcon className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-water-400" />
-                <input
-                  type="number"
-                  value={profile.height_cm ?? ''}
-                  onChange={(e) => setProfile({ ...profile, height_cm: Number(e.target.value) })}
+                <NumberField
+                  value={profile.height_cm}
+                  nullable
+                  min={50}
+                  max={250}
+                  onChange={(v) => setProfile({ ...profile, height_cm: v })}
                   className="w-full min-w-0 rounded-2xl border border-slate-200 py-2.5 pl-9 pr-3 outline-none transition focus:border-water-500 focus:ring-4 focus:ring-water-100"
                 />
               </div>
@@ -241,10 +274,11 @@ export function ProfilePage() {
           <div className="rounded-2xl bg-water-50 p-4">
             <p className="mb-2 text-sm text-slate-500">เป้าหมายน้ำต่อวัน</p>
             <div className="flex items-center gap-2">
-              <input
-                type="number"
+              <NumberField
                 value={profile.daily_goal_ml}
-                onChange={(e) => setProfile({ ...profile, daily_goal_ml: Number(e.target.value) })}
+                min={500}
+                max={10000}
+                onChange={(v) => v != null && setProfile({ ...profile, daily_goal_ml: v })}
                 className="font-display w-28 min-w-0 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-center text-lg font-semibold text-water-700 outline-none focus:border-water-500"
               />
               <span className="text-sm text-slate-500">ml</span>
@@ -263,19 +297,21 @@ export function ProfilePage() {
           <div className="flex gap-3">
             <label className="flex min-w-0 flex-1 flex-col gap-1 text-sm text-slate-600">
               ขนาดแก้ว (ml)
-              <input
-                type="number"
+              <NumberField
                 value={profile.glass_size_ml}
-                onChange={(e) => setProfile({ ...profile, glass_size_ml: Number(e.target.value) })}
+                min={50}
+                max={2000}
+                onChange={(v) => v != null && setProfile({ ...profile, glass_size_ml: v })}
                 className="w-full min-w-0 rounded-2xl border border-slate-200 px-3 py-2.5 outline-none transition focus:border-water-500 focus:ring-4 focus:ring-water-100"
               />
             </label>
             <label className="flex min-w-0 flex-1 flex-col gap-1 text-sm text-slate-600">
               ขนาดขวด (ml)
-              <input
-                type="number"
+              <NumberField
                 value={profile.bottle_size_ml}
-                onChange={(e) => setProfile({ ...profile, bottle_size_ml: Number(e.target.value) })}
+                min={50}
+                max={5000}
+                onChange={(v) => v != null && setProfile({ ...profile, bottle_size_ml: v })}
                 className="w-full min-w-0 rounded-2xl border border-slate-200 px-3 py-2.5 outline-none transition focus:border-water-500 focus:ring-4 focus:ring-water-100"
               />
             </label>
@@ -311,33 +347,33 @@ export function ProfilePage() {
 
         {profile.reminder_enabled && (
           <div className="mt-3 flex flex-col gap-3">
-            <div className="flex gap-3">
-              <label className="flex min-w-0 flex-1 flex-col gap-1 text-sm text-slate-600">
+            <div className="grid grid-cols-2 gap-3">
+              <label className="flex min-w-0 flex-col gap-1 text-sm text-slate-600">
                 เริ่ม
                 <input
                   type="time"
                   value={profile.reminder_start}
                   onChange={(e) => setProfile({ ...profile, reminder_start: e.target.value })}
-                  className="w-full min-w-0 rounded-2xl border border-slate-200 px-3 py-2.5 outline-none transition focus:border-water-500 focus:ring-4 focus:ring-water-100"
+                  className="w-full min-w-0 appearance-none rounded-2xl border border-slate-200 px-3 py-2.5 outline-none transition focus:border-water-500 focus:ring-4 focus:ring-water-100"
                 />
               </label>
-              <label className="flex min-w-0 flex-1 flex-col gap-1 text-sm text-slate-600">
+              <label className="flex min-w-0 flex-col gap-1 text-sm text-slate-600">
                 สิ้นสุด
                 <input
                   type="time"
                   value={profile.reminder_end}
                   onChange={(e) => setProfile({ ...profile, reminder_end: e.target.value })}
-                  className="w-full min-w-0 rounded-2xl border border-slate-200 px-3 py-2.5 outline-none transition focus:border-water-500 focus:ring-4 focus:ring-water-100"
+                  className="w-full min-w-0 appearance-none rounded-2xl border border-slate-200 px-3 py-2.5 outline-none transition focus:border-water-500 focus:ring-4 focus:ring-water-100"
                 />
               </label>
             </div>
             <label className="flex flex-col gap-1 text-sm text-slate-600">
               เตือนทุกกี่นาที
-              <input
-                type="number"
-                min={15}
+              <NumberField
                 value={profile.reminder_interval_min}
-                onChange={(e) => setProfile({ ...profile, reminder_interval_min: Number(e.target.value) })}
+                min={5}
+                max={480}
+                onChange={(v) => v != null && setProfile({ ...profile, reminder_interval_min: v })}
                 className="rounded-2xl border border-slate-200 px-3 py-2.5 outline-none transition focus:border-water-500 focus:ring-4 focus:ring-water-100"
               />
             </label>
@@ -396,6 +432,31 @@ export function ProfilePage() {
         <p className="mt-2 text-xs text-amber-500">
           เปิดเพื่อแสดงวิดเจ็ตบันทึกแอลกอฮอล์ในหน้าหลัก
         </p>
+      </div>
+
+      <div className="w-full max-w-sm rounded-[28px] border border-latte-100 bg-gradient-to-br from-latte-50 to-white p-6 shadow-md shadow-latte-100/70">
+        <h2 className="mb-2 flex items-center gap-2 text-sm font-semibold text-latte-600">
+          <TakeoutCupIcon className="h-4 w-4 text-latte-500" fillPercent={45} />
+          ชดเชยชา/กาแฟ/น้ำหวาน
+        </h2>
+        <p className="mb-3 text-xs text-latte-500">
+          ทนคาเฟอีนได้ดี เลือกน้อยลงได้ — ค่านี้คือสัดส่วนที่เป้าหมายน้ำเพิ่มขึ้นต่อปริมาณที่ดื่ม
+        </p>
+        <div className="flex gap-2">
+          {COMPENSATION_RATIO_PRESETS.map((preset) => (
+            <button
+              key={preset.label}
+              onClick={() => handleCompensationRatioChange(preset.ratio)}
+              className={`flex-1 rounded-full py-2 text-sm font-medium transition ${
+                profile.caffeine_compensation_ratio === preset.ratio
+                  ? 'bg-latte-500 text-white shadow-md shadow-latte-500/30'
+                  : 'bg-white text-latte-600 shadow-sm hover:bg-latte-50'
+              }`}
+            >
+              {preset.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {canInstall && (

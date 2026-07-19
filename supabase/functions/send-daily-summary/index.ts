@@ -33,7 +33,7 @@ Deno.serve(async (req) => {
 
   const { data: profiles, error } = await supabase
     .from('profiles')
-    .select('id, timezone, daily_goal_ml, last_daily_summary_sent_date')
+    .select('id, timezone, daily_goal_ml, caffeine_compensation_ratio, last_daily_summary_sent_date')
     .eq('daily_summary_enabled', true)
 
   if (error) {
@@ -53,18 +53,22 @@ Deno.serve(async (req) => {
       .eq('user_id', profile.id)
     if (!subscriptions?.length) continue
 
-    const { data: logs } = await supabase
-      .from('water_logs')
-      .select('amount_ml')
-      .eq('user_id', profile.id)
-      .eq('log_date', today)
+    const [{ data: logs }, { data: otherLogs }] = await Promise.all([
+      supabase.from('water_logs').select('amount_ml').eq('user_id', profile.id).eq('log_date', today),
+      supabase.from('other_drink_logs').select('amount_ml').eq('user_id', profile.id).eq('log_date', today),
+    ])
     const totalMl = (logs ?? []).reduce((sum: number, row: { amount_ml: number }) => sum + row.amount_ml, 0)
-    const percent = profile.daily_goal_ml > 0 ? Math.round((totalMl / profile.daily_goal_ml) * 100) : 0
+    const otherMl = (otherLogs ?? []).reduce((sum: number, row: { amount_ml: number }) => sum + row.amount_ml, 0)
+    // Mirrors src/lib/otherDrinks.ts's otherDrinkWaterCredit/otherDrinkGoalCompensation —
+    // keep in sync with those ratios if they ever change.
+    const effectiveMl = totalMl + Math.round(otherMl * 0.5)
+    const effectiveGoalMl = profile.daily_goal_ml + Math.round(otherMl * profile.caffeine_compensation_ratio)
+    const percent = effectiveGoalMl > 0 ? Math.round((effectiveMl / effectiveGoalMl) * 100) : 0
 
     const payload = JSON.stringify({
       title: 'สรุปการดื่มน้ำวันนี้ 💧',
       body:
-        totalMl >= profile.daily_goal_ml
+        effectiveMl >= effectiveGoalMl
           ? `เก่งมาก! วันนี้ดื่มไป ${totalMl.toLocaleString()} ml ครบเป้าหมายแล้ว`
           : `วันนี้ดื่มไป ${totalMl.toLocaleString()} ml (${percent}%) ของเป้าหมาย ${profile.daily_goal_ml.toLocaleString()} ml`,
     })
