@@ -20,6 +20,7 @@ import { useAuth } from '../../lib/AuthContext'
 import { supabase } from '../../lib/supabase'
 import { fetchProfile, updateProfile, type Profile } from '../../lib/profile'
 import { fetchRankPoints } from '../../lib/history'
+import { syncDisplayNameAcrossGroups } from '../../lib/groups'
 import { COMPENSATION_RATIO_PRESETS } from '../../lib/otherDrinks'
 import { ACTIVITY_OPTIONS, calculateBmi, calculateDailyGoalMl, getBmiCategory } from '../../lib/water'
 import { requestNotificationPermission, subscribeToPush, unsubscribeFromPush } from '../../lib/notifications'
@@ -94,6 +95,7 @@ export function ProfilePage() {
     try {
       const updated = await updateProfile(user.id, profile)
       setProfile(updated)
+      syncDisplayNameAcrossGroups(user.id, updated.display_name).catch(() => {})
       setSaved(true)
       setTimeout(() => setSaved(false), 2000)
     } catch (err) {

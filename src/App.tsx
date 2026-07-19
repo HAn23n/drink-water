@@ -7,6 +7,7 @@ import { LoginPage } from './features/auth/LoginPage'
 import { OnboardingPage } from './features/onboarding/OnboardingPage'
 import { HomePage } from './features/home/HomePage'
 import { HistoryPage } from './features/history/HistoryPage'
+import { SquadPage } from './features/squad/SquadPage'
 import { ProfilePage } from './features/profile/ProfilePage'
 import { BottomNav } from './components/BottomNav'
 import { fetchProfile } from './lib/profile'
@@ -89,6 +90,16 @@ function AnimatedRoutes() {
             <ProtectedRoute>
               <AppLayout>
                 <HistoryPage />
+              </AppLayout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/squad"
+          element={
+            <ProtectedRoute>
+              <AppLayout>
+                <SquadPage />
               </AppLayout>
             </ProtectedRoute>
           }

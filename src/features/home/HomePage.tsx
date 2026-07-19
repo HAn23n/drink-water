@@ -44,6 +44,7 @@ import {
   useStreakFreeze,
   findBrokenStreakDay,
 } from '../../lib/streakFreeze'
+import { upsertMyProgressSnapshot } from '../../lib/groups'
 import {
   getWidgetOrder,
   saveWidgetOrder,
@@ -222,6 +223,13 @@ export function HomePage() {
       celebratedRef.current = false
     }
   }, [goalReached])
+
+  // Keeps this user's row in group_progress_snapshots current — the only thing
+  // squad-mates can ever read (see migration 0009), and only %/rank, never ml.
+  useEffect(() => {
+    if (!user || targetDay !== 'today' || !todayDate || effectiveGoalMl <= 0) return
+    upsertMyProgressSnapshot(user.id, todayDate, percent, rankPoints).catch(() => {})
+  }, [user, targetDay, todayDate, percent, rankPoints, effectiveGoalMl])
 
   // Nudge once per crossing into the home stretch, same one-shot pattern as the
   // goal-reached celebration above — only as a notification if already granted,
