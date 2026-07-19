@@ -90,6 +90,7 @@ export function HomePage() {
   const [presetName, setPresetName] = useState('')
   const [otherDrinkTotal, setOtherDrinkTotal] = useState(0)
   const [rankPoints, setRankPoints] = useState(0)
+  const [rankPointsLoaded, setRankPointsLoaded] = useState(false)
   const [frozenDates, setFrozenDates] = useState<Set<string>>(new Set())
   const [freezeAvailable, setFreezeAvailable] = useState(false)
   const [freezing, setFreezing] = useState(false)
@@ -157,6 +158,7 @@ export function HomePage() {
         if (!cancelled) {
           setRecentTotals(totals)
           setRankPoints(points)
+          setRankPointsLoaded(true)
           setFrozenDates(new Set(freezes.map((f) => f.applied_date)))
           setFreezeAvailable(available)
         }
@@ -235,9 +237,9 @@ export function HomePage() {
   // Keeps this user's row in group_progress_snapshots current — the only thing
   // squad-mates can ever read (see migration 0009), and only %/rank, never ml.
   useEffect(() => {
-    if (!user || targetDay !== 'today' || !todayDate || effectiveGoalMl <= 0) return
+    if (!user || targetDay !== 'today' || !todayDate || effectiveGoalMl <= 0 || !rankPointsLoaded) return
     upsertMyProgressSnapshot(user.id, todayDate, percent, rankPoints).catch(() => {})
-  }, [user, targetDay, todayDate, percent, rankPoints, effectiveGoalMl])
+  }, [user, targetDay, todayDate, percent, rankPoints, effectiveGoalMl, rankPointsLoaded])
 
   // Nudge once per crossing into the home stretch, same one-shot pattern as the
   // goal-reached celebration above — only as a notification if already granted,
@@ -710,6 +712,8 @@ export function HomePage() {
             <NumberField
               value={customAmount}
               nullable
+              min={1}
+              max={5000}
               autoFocus
               placeholder="ปริมาณ (ml)"
               onChange={setCustomAmount}

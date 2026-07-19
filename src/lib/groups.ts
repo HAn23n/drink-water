@@ -25,24 +25,15 @@ export interface GroupProgressSnapshot {
   rank_points: number
 }
 
-function generateInviteCode(): string {
-  return Math.random().toString(36).slice(2, 6).toUpperCase() + Math.random().toString(36).slice(2, 6).toUpperCase()
-}
-
-export async function createGroup(userId: string, displayName: string, name: string): Promise<Group> {
-  const { data: group, error: groupError } = await supabase
-    .from('groups')
-    .insert({ name, owner_id: userId, invite_code: generateInviteCode() })
-    .select('id, name, owner_id, invite_code, created_at')
-    .single()
-  if (groupError) throw groupError
-
-  const { error: memberError } = await supabase
-    .from('group_members')
-    .insert({ group_id: group.id, user_id: userId, display_name: displayName || 'ผู้ใช้' })
-  if (memberError) throw memberError
-
-  return group
+/** Creates the group and adds the caller as its first member — all
+ *  server-side via the create_group_with_owner() RPC so the two writes are
+ *  atomic (a client-side failure between them used to leave an orphaned
+ *  group with no members) and group_members has no direct-insert path left
+ *  for it to race with. */
+export async function createGroup(displayName: string, name: string): Promise<Group> {
+  const { data, error } = await supabase.rpc('create_group_with_owner', { p_name: name, p_display_name: displayName })
+  if (error) throw error
+  return data
 }
 
 /** Looks up the group by code, enforces the 8-member cap, and adds the caller

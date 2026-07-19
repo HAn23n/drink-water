@@ -7,6 +7,7 @@ import { ChallengeCard } from './ChallengeCard'
 import { useAuth } from '../../lib/AuthContext'
 import { fetchProfile, updateProfile, type Profile } from '../../lib/profile'
 import { calculateStreak, fetchDailyTotals, fetchMonthlyAverages, type DailyTotal, type MonthlyAverage } from '../../lib/history'
+import { fetchRecentStreakFreezes } from '../../lib/streakFreeze'
 import { shareProgressCard } from '../../lib/shareCard'
 
 const RANGE_OPTIONS = [7, 14, 30] as const
@@ -26,6 +27,7 @@ export function HistoryPage() {
   const { user } = useAuth()
   const [profile, setProfile] = useState<Profile | null>(null)
   const [allTotals, setAllTotals] = useState<DailyTotal[]>([])
+  const [frozenDates, setFrozenDates] = useState<Set<string>>(new Set())
   const [monthlyAverages, setMonthlyAverages] = useState<MonthlyAverage[]>([])
   const [rangeDays, setRangeDays] = useState<RangeDays>(7)
   const [loading, setLoading] = useState(true)
@@ -51,7 +53,17 @@ export function HistoryPage() {
           loadedProfile.caffeine_compensation_ratio,
         )
         if (!cancelled) setAllTotals(totals)
-        const monthly = await fetchMonthlyAverages(user!.id, loadedProfile.timezone, 6)
+        if (totals.length > 0) {
+          const freezes = await fetchRecentStreakFreezes(user!.id, totals[0].date)
+          if (!cancelled) setFrozenDates(new Set(freezes.map((f) => f.applied_date)))
+        }
+        const monthly = await fetchMonthlyAverages(
+          user!.id,
+          loadedProfile.timezone,
+          loadedProfile.daily_goal_ml,
+          6,
+          loadedProfile.caffeine_compensation_ratio,
+        )
         if (!cancelled) setMonthlyAverages(monthly)
       } catch (err) {
         if (!cancelled) setError(err instanceof Error ? err.message : 'โหลดข้อมูลไม่สำเร็จ')
@@ -66,7 +78,7 @@ export function HistoryPage() {
     }
   }, [user])
 
-  const streak = calculateStreak(allTotals)
+  const streak = calculateStreak(allTotals, frozenDates)
 
   // Persist a new personal-best streak so badges stay unlocked after it later breaks.
   useEffect(() => {
@@ -234,7 +246,7 @@ export function HistoryPage() {
               <Tooltip formatter={(value) => [`${Number(value).toLocaleString()} ml/วัน`, 'เฉลี่ย']} />
               <Bar dataKey="avgMl" radius={[8, 8, 0, 0]}>
                 {monthlyAverages.map((entry) => (
-                  <Cell key={entry.month} fill={entry.avgMl >= profile.daily_goal_ml ? '#17b4e0' : '#cfeef9'} />
+                  <Cell key={entry.month} fill={entry.avgMl >= entry.avgEffectiveGoalMl ? '#17b4e0' : '#cfeef9'} />
                 ))}
               </Bar>
             </BarChart>

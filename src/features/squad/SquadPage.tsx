@@ -146,12 +146,16 @@ export function SquadPage() {
         const latestPointsByUser = new Map(Array.from(latestByUser, ([id, v]) => [id, v.points] as const))
         const myPoints = latestPointsByUser.get(user.id) ?? 0
         const lastSeen = readLastSeen(groupId)
+        // No baseline yet for this group (first-ever check, or cleared storage) —
+        // recording one now without comparing avoids treating "already ahead"
+        // as "just overtook you" for every member who happens to lead already.
+        const hasBaseline = Object.keys(lastSeen).length > 0
         const nextSeen: Record<string, number> = { ...lastSeen }
         for (const member of groupMembers) {
           if (member.user_id === user.id) continue
           const theirPoints = latestPointsByUser.get(member.user_id) ?? 0
           const before = lastSeen[member.user_id] ?? 0
-          if (before <= myPoints && theirPoints > myPoints) {
+          if (hasBaseline && before <= myPoints && theirPoints > myPoints) {
             setBanner(`${member.display_name} แซงคุณแล้ว! ไล่ตามคืนหน่อย`)
             if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
               new Notification('เพื่อนแซงคุณแล้ว!', {
@@ -181,7 +185,7 @@ export function SquadPage() {
     setCreating(true)
     setError(null)
     try {
-      const group = await createGroup(user.id, profile.display_name, newGroupName.trim())
+      const group = await createGroup(profile.display_name, newGroupName.trim())
       setGroups((prev) => [...prev, group])
       setSelectedGroupId(group.id)
       setNewGroupName('')
@@ -250,9 +254,10 @@ export function SquadPage() {
       .map((member) => {
         const memberSnapshots = snapshots.filter((s) => s.user_id === member.user_id)
         const daily = memberSnapshots.find((s) => s.log_date === today)
-        const weekAvg = memberSnapshots.length
-          ? memberSnapshots.reduce((sum, s) => sum + s.percent_of_goal, 0) / memberSnapshots.length
-          : 0
+        // Fixed 7-day denominator (matching the fetch window in reloadGroupData)
+        // so a member with fewer days logged isn't compared on a smaller base —
+        // missing days count as 0%, same as a day where the goal wasn't met.
+        const weekAvg = memberSnapshots.reduce((sum, s) => sum + s.percent_of_goal, 0) / 7
         const latestPoints = [...memberSnapshots].sort((a, b) => (a.log_date < b.log_date ? 1 : -1))[0]?.rank_points ?? 0
         return {
           member,

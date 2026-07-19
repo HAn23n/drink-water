@@ -9,6 +9,10 @@ interface NumberFieldProps
   /** Emit `null` when the field is cleared. Otherwise clearing is allowed while
    *  editing but reverts to the last value on blur (for required numbers). */
   nullable?: boolean
+  /** Clamped on blur, since this renders as type="text" and browsers only
+   *  enforce min/max on native type="number" inputs. */
+  min?: number
+  max?: number
 }
 
 /**
@@ -17,7 +21,7 @@ interface NumberFieldProps
  * clear and retype; it re-syncs from `value` only when not focused, so external
  * changes (like "use suggested goal") still flow in.
  */
-export function NumberField({ value, onChange, decimal = false, nullable = false, ...rest }: NumberFieldProps) {
+export function NumberField({ value, onChange, decimal = false, nullable = false, min, max, ...rest }: NumberFieldProps) {
   const [text, setText] = useState(value == null ? '' : String(value))
   const [focused, setFocused] = useState(false)
 
@@ -49,6 +53,15 @@ export function NumberField({ value, onChange, decimal = false, nullable = false
     setFocused(false)
     if ((text === '' || text === '.') && !nullable) {
       setText(value == null ? '' : String(value))
+      return
+    }
+    const parsed = text === '' || text === '.' ? null : Number(text)
+    if (parsed != null && (min != null || max != null)) {
+      const clamped = Math.min(max ?? Infinity, Math.max(min ?? -Infinity, parsed))
+      if (clamped !== parsed) {
+        setText(String(clamped))
+        onChange(clamped)
+      }
     }
   }
 

@@ -169,6 +169,10 @@ export interface MonthlyAverage {
   month: string
   label: string
   avgMl: number
+  /** Average effective (compensated) goal across the month's days — the bar
+   *  should be compared against this, not the raw daily_goal_ml, so "goal
+   *  met" coloring agrees with the streak/rank/calendar everywhere else. */
+  avgEffectiveGoalMl: number
 }
 
 /** Average effective ml/day for each of the last `months` calendar months
@@ -177,7 +181,9 @@ export interface MonthlyAverage {
 export async function fetchMonthlyAverages(
   userId: string,
   timezone: string,
+  dailyGoalMl: number,
   months = 6,
+  compensationRatio: number = OTHER_DRINK_GOAL_COMPENSATION_RATIO,
 ): Promise<MonthlyAverage[]> {
   const todayStr = logDateInTimeZone(new Date(), timezone)
   const [todayYear, todayMonth, todayDay] = todayStr.split('-').map(Number)
@@ -211,9 +217,12 @@ export async function fetchMonthlyAverages(
     const elapsedDays = isCurrentMonth ? todayDay : daysInMonth
 
     let sumMl = 0
+    let sumEffectiveGoalMl = 0
     for (let day = 1; day <= elapsedDays; day++) {
       const date = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
-      sumMl += (waterByDate.get(date) ?? 0) + otherDrinkWaterCredit(otherByDate.get(date) ?? 0)
+      const otherMl = otherByDate.get(date) ?? 0
+      sumMl += (waterByDate.get(date) ?? 0) + otherDrinkWaterCredit(otherMl)
+      sumEffectiveGoalMl += dailyGoalMl + otherDrinkGoalCompensation(otherMl, compensationRatio)
     }
 
     const label = new Date(Date.UTC(year, month, 1)).toLocaleDateString('th-TH', { month: 'short', timeZone: 'UTC' })
@@ -221,6 +230,7 @@ export async function fetchMonthlyAverages(
       month: `${year}-${String(month + 1).padStart(2, '0')}`,
       label,
       avgMl: elapsedDays > 0 ? Math.round(sumMl / elapsedDays) : 0,
+      avgEffectiveGoalMl: elapsedDays > 0 ? Math.round(sumEffectiveGoalMl / elapsedDays) : dailyGoalMl,
     }
   })
 }

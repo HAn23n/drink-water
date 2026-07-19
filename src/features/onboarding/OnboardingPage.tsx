@@ -66,6 +66,8 @@ export function OnboardingPage() {
               น้ำหนัก (kg)
               <NumberField
                 value={weightKg}
+                min={20}
+                max={300}
                 onChange={(v) => v != null && setWeightKg(v)}
                 className="w-full min-w-0 rounded-2xl border border-slate-200 px-4 py-2.5 outline-none transition focus:border-water-500 focus:ring-4 focus:ring-water-100"
               />
@@ -74,6 +76,8 @@ export function OnboardingPage() {
               ส่วนสูง (cm)
               <NumberField
                 value={heightCm}
+                min={50}
+                max={250}
                 onChange={(v) => v != null && setHeightCm(v)}
                 className="w-full min-w-0 rounded-2xl border border-slate-200 px-4 py-2.5 outline-none transition focus:border-water-500 focus:ring-4 focus:ring-water-100"
               />
@@ -91,6 +95,8 @@ export function OnboardingPage() {
               <NumberField
                 value={goal}
                 nullable
+                min={500}
+                max={10000}
                 onChange={setGoalOverride}
                 className="font-display w-28 rounded-xl border border-slate-200 bg-white px-3 py-1 text-center text-lg font-semibold text-water-700 outline-none focus:border-water-500"
               />

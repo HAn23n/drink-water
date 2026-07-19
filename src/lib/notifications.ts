@@ -30,7 +30,9 @@ export function startLocalReminders(profile: Profile): () => void {
     return () => {}
   }
 
-  const intervalMs = profile.reminder_interval_min * 60_000
+  // Floored defensively — a stored value of 0 would otherwise call
+  // setInterval(fn, 0), firing continuously at the browser-clamped minimum.
+  const intervalMs = Math.max(5, profile.reminder_interval_min) * 60_000
   const timer = setInterval(() => {
     const now = currentTimeInZone(profile.timezone)
     if (isWithinWindow(now, profile.reminder_start.slice(0, 5), profile.reminder_end.slice(0, 5))) {
