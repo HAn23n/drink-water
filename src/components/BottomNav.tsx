@@ -1,14 +1,16 @@
 import { NavLink } from 'react-router-dom'
-import { HomeIcon, ChartBarIcon, UserIcon } from '@heroicons/react/24/outline'
+import { HomeIcon, ChartBarIcon, UserGroupIcon, UserIcon } from '@heroicons/react/24/outline'
 import {
   HomeIcon as HomeIconSolid,
   ChartBarIcon as ChartBarIconSolid,
+  UserGroupIcon as UserGroupIconSolid,
   UserIcon as UserIconSolid,
 } from '@heroicons/react/24/solid'
 
 const ITEMS = [
   { to: '/', label: 'หน้าหลัก', Icon: HomeIcon, IconActive: HomeIconSolid },
   { to: '/history', label: 'ประวัติ', Icon: ChartBarIcon, IconActive: ChartBarIconSolid },
+  { to: '/squad', label: 'กลุ่ม', Icon: UserGroupIcon, IconActive: UserGroupIconSolid },
   { to: '/profile', label: 'โปรไฟล์', Icon: UserIcon, IconActive: UserIconSolid },
 ]
 

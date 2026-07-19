@@ -41,13 +41,14 @@ export async function evaluateChallenge(
   timezone: string,
   dailyGoalMl: number,
   challenge: Challenge,
+  compensationRatio?: number,
 ): Promise<{ daysElapsed: number; daysMet: number; onTrack: boolean; status: Challenge['status'] }> {
   const today = todayInTimeZone(timezone)
   const startedAt = new Date(`${challenge.started_date}T00:00:00`)
   const daysSinceStart = Math.floor((Date.now() - startedAt.getTime()) / 86_400_000) + 1
   const daysElapsed = Math.min(daysSinceStart, challenge.target_days)
 
-  const totals = await fetchDailyTotals(userId, timezone, dailyGoalMl, Math.max(daysSinceStart, 1))
+  const totals = await fetchDailyTotals(userId, timezone, dailyGoalMl, Math.max(daysSinceStart, 1), compensationRatio)
   const relevant = totals.filter((d) => d.date >= challenge.started_date && d.date <= today)
   const pastDays = relevant.filter((d) => d.date < today)
   const daysMet = relevant.filter((d) => d.goalMet).length

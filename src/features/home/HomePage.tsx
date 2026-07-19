@@ -12,22 +12,39 @@ import {
   LightBulbIcon,
   XMarkIcon,
   ChartBarIcon,
+  BoltIcon,
+  ShieldCheckIcon,
+  FaceSmileIcon,
 } from '@heroicons/react/24/outline'
 import { CheckBadgeIcon, FireIcon } from '@heroicons/react/24/solid'
 import { LoadingScreen, ErrorScreen } from '../../components/LoadingScreen'
 import { ConfirmDialog } from '../../components/ConfirmDialog'
 import { GlassIcon, BottleIcon } from '../../components/DrinkIcons'
+import { NumberField } from '../../components/NumberField'
 import { useAuth } from '../../lib/AuthContext'
 import { fetchProfile, type Profile } from '../../lib/profile'
 import { addWaterLog, deleteWaterLog, fetchLogsForDate, syncPendingLogs, type WaterLog } from '../../lib/waterLogs'
 import { removeFromQueue } from '../../lib/offlineQueue'
 import { todayInTimeZone, yesterdayInTimeZone } from '../../lib/water'
-import { playAddSound } from '../../lib/sound'
-import { celebrateGoalReached } from '../../lib/celebrate'
-import { getTipOfTheDay } from '../../lib/tips'
+import { playAddSound, playRankUpSound } from '../../lib/sound'
+import { celebrateGoalReached, celebrateRankUp } from '../../lib/celebrate'
+import { getTipOfTheDay, getMissDayQuip } from '../../lib/tips'
 import { isAlcoholTrackingEnabled } from '../../lib/alcoholPref'
 import { getCustomPresets, saveCustomPresets, type CustomPreset } from '../../lib/customPresets'
-import { fetchDailyTotals, calculateStreak, type DailyTotal } from '../../lib/history'
+import { fetchDailyTotals, fetchRankPoints, calculateStreak, type DailyTotal } from '../../lib/history'
+import { getRank } from '../../lib/rank'
+import {
+  fetchOtherDrinkLogsForDate,
+  otherDrinkWaterCredit,
+  otherDrinkGoalCompensation,
+} from '../../lib/otherDrinks'
+import {
+  fetchRecentStreakFreezes,
+  hasFreezeAvailable,
+  useStreakFreeze,
+  findBrokenStreakDay,
+} from '../../lib/streakFreeze'
+import { upsertMyProgressSnapshot } from '../../lib/groups'
 import {
   getWidgetOrder,
   saveWidgetOrder,
@@ -38,9 +55,11 @@ import {
   type WidgetId,
 } from '../../lib/widgetLayout'
 import { WaveCircle } from '../../components/WaveCircle'
+import { RankBadge } from '../../components/RankBadge'
 import { PacingChecklist } from './PacingChecklist'
 import { DailySummaryModal } from './DailySummaryModal'
 import { AlcoholCard } from './AlcoholCard'
+import { OtherDrinksCard } from './OtherDrinksCard'
 import { DraggableWidget } from './DraggableWidget'
 import { ChallengeCard } from '../history/ChallengeCard'
 
@@ -54,7 +73,7 @@ export function HomePage() {
   const [logs, setLogs] = useState<WaterLog[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [customAmount, setCustomAmount] = useState('')
+  const [customAmount, setCustomAmount] = useState<number | null>(null)
   const [showCustom, setShowCustom] = useState(false)
   const [pendingDelete, setPendingDelete] = useState<WaterLog | null>(null)
   const [targetDay, setTargetDay] = useState<TargetDay>('today')
@@ -69,7 +88,16 @@ export function HomePage() {
   const [presets, setPresets] = useState<CustomPreset[]>([])
   const [showSavePreset, setShowSavePreset] = useState(false)
   const [presetName, setPresetName] = useState('')
+  const [otherDrinkTotal, setOtherDrinkTotal] = useState(0)
+  const [rankPoints, setRankPoints] = useState(0)
+  const [rankPointsLoaded, setRankPointsLoaded] = useState(false)
+  const [frozenDates, setFrozenDates] = useState<Set<string>>(new Set())
+  const [freezeAvailable, setFreezeAvailable] = useState(false)
+  const [freezing, setFreezing] = useState(false)
+  const [missQuipDismissedDate, setMissQuipDismissedDate] = useState<string | null>(null)
   const celebratedRef = useRef(false)
+  const nearGoalRef = useRef(false)
+  const prevRankTierRef = useRef<number | null>(null)
 
   // The water totals/list on screen follow whichever day is toggled; streak/tip/alcohol
   // always stay pinned to the real "today" regardless of what's being viewed/backdated.
@@ -78,6 +106,15 @@ export function HomePage() {
   const reloadLogsForDate = useCallback(async (userId: string, date: string) => {
     setLogs(await fetchLogsForDate(userId, date))
   }, [])
+
+  const reloadOtherDrinksForDate = useCallback(async (userId: string, date: string) => {
+    const rows = await fetchOtherDrinkLogsForDate(userId, date)
+    setOtherDrinkTotal(rows.reduce((sum, row) => sum + row.amount_ml, 0))
+  }, [])
+
+  useEffect(() => {
+    if (user) setMissQuipDismissedDate(localStorage.getItem(`miss-quip-dismissed-${user.id}`))
+  }, [user])
 
   useEffect(() => {
     if (!user) return
@@ -95,12 +132,36 @@ export function HomePage() {
         setWidgetOrder(getWidgetOrder(user!.id))
         setHiddenWidgets(getHiddenWidgets(user!.id))
         setPresets(getCustomPresets(user!.id))
-        await syncPendingLogs(user!.id)
         const today = todayInTimeZone(loadedProfile.timezone)
         setTodayDate(today)
-        await reloadLogsForDate(user!.id, today)
-        const totals = await fetchDailyTotals(user!.id, loadedProfile.timezone, loadedProfile.daily_goal_ml, 30)
-        if (!cancelled) setRecentTotals(totals)
+
+        // Everything below only depends on the profile + today's date, not on
+        // each other — fire them all at once instead of one round trip at a time.
+        const thirtyDaysAgo = new Date(`${today}T00:00:00`)
+        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 29)
+        const sinceDate = thirtyDaysAgo.toISOString().slice(0, 10)
+
+        const [, , totals, points, freezes, available] = await Promise.all([
+          syncPendingLogs(user!.id).then(() => reloadLogsForDate(user!.id, today)),
+          reloadOtherDrinksForDate(user!.id, today),
+          fetchDailyTotals(
+            user!.id,
+            loadedProfile.timezone,
+            loadedProfile.daily_goal_ml,
+            30,
+            loadedProfile.caffeine_compensation_ratio,
+          ),
+          fetchRankPoints(user!.id, loadedProfile.daily_goal_ml, loadedProfile.caffeine_compensation_ratio),
+          fetchRecentStreakFreezes(user!.id, sinceDate),
+          hasFreezeAvailable(user!.id, today),
+        ])
+        if (!cancelled) {
+          setRecentTotals(totals)
+          setRankPoints(points)
+          setRankPointsLoaded(true)
+          setFrozenDates(new Set(freezes.map((f) => f.applied_date)))
+          setFreezeAvailable(available)
+        }
       } catch (err) {
         if (!cancelled) setError(err instanceof Error ? err.message : 'โหลดข้อมูลไม่สำเร็จ')
       } finally {
@@ -112,13 +173,14 @@ export function HomePage() {
     return () => {
       cancelled = true
     }
-  }, [user, navigate, reloadLogsForDate])
+  }, [user, navigate, reloadLogsForDate, reloadOtherDrinksForDate])
 
   // Refetch whenever the viewed day changes — toggling today/yesterday, or a rollover.
   useEffect(() => {
     if (!user || !viewDate) return
     reloadLogsForDate(user.id, viewDate)
-  }, [user, viewDate, reloadLogsForDate])
+    reloadOtherDrinksForDate(user.id, viewDate)
+  }, [user, viewDate, reloadLogsForDate, reloadOtherDrinksForDate])
 
   // Keep "today" honest across a midnight rollover and reconnects.
   useEffect(() => {
@@ -141,10 +203,20 @@ export function HomePage() {
   }, [user, profile, todayDate, viewDate, reloadLogsForDate])
 
   const totalMl = logs.reduce((sum, log) => sum + log.amount_ml, 0)
-  const percent = profile && profile.daily_goal_ml > 0 ? (totalMl / profile.daily_goal_ml) * 100 : 0
+  // Sweet/caffeinated drinks count at a reduced rate toward the goal, and bump the
+  // goal itself up a bit to compensate — see src/lib/otherDrinks.ts for the ratios.
+  const effectiveTotalMl = totalMl + otherDrinkWaterCredit(otherDrinkTotal)
+  const effectiveGoalMl = profile
+    ? profile.daily_goal_ml + otherDrinkGoalCompensation(otherDrinkTotal, profile.caffeine_compensation_ratio)
+    : 0
+  const percent = effectiveGoalMl > 0 ? (effectiveTotalMl / effectiveGoalMl) * 100 : 0
   const viewGoalReached = percent >= 100
   // Confetti/banner are about crossing today's goal specifically — not a retroactive backdate.
   const goalReached = targetDay === 'today' && viewGoalReached
+  const remainingMl = Math.max(Math.round(effectiveGoalMl - effectiveTotalMl), 0)
+  // An encouraging nudge for the home stretch — distinct from the reminder pushes,
+  // which fire on a timer regardless of how close today's progress actually is.
+  const nearGoal = targetDay === 'today' && !viewGoalReached && percent >= 85
 
   // Celebrate once per crossing — resets so a later dip-and-recross (e.g. after
   // undoing a log) can celebrate again, but a render while already over 100% won't.
@@ -152,10 +224,51 @@ export function HomePage() {
     if (goalReached && !celebratedRef.current) {
       celebratedRef.current = true
       celebrateGoalReached()
+      if (user && profile) {
+        fetchRankPoints(user.id, profile.daily_goal_ml, profile.caffeine_compensation_ratio)
+          .then(setRankPoints)
+          .catch(() => {})
+      }
     } else if (!goalReached) {
       celebratedRef.current = false
     }
   }, [goalReached])
+
+  // Keeps this user's row in group_progress_snapshots current — the only thing
+  // squad-mates can ever read (see migration 0009), and only %/rank, never ml.
+  useEffect(() => {
+    if (!user || targetDay !== 'today' || !todayDate || effectiveGoalMl <= 0 || !rankPointsLoaded) return
+    upsertMyProgressSnapshot(user.id, todayDate, percent, rankPoints).catch(() => {})
+  }, [user, targetDay, todayDate, percent, rankPoints, effectiveGoalMl, rankPointsLoaded])
+
+  // Nudge once per crossing into the home stretch, same one-shot pattern as the
+  // goal-reached celebration above — only as a notification if already granted,
+  // never prompting from a passive background check.
+  useEffect(() => {
+    if (nearGoal && !nearGoalRef.current) {
+      nearGoalRef.current = true
+      if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+        new Notification('ใกล้ถึงเป้าหมายแล้ว!', {
+          body: `เหลืออีกแค่ ${remainingMl.toLocaleString()} ml เท่านั้น สู้ต่ออีกนิด 💪`,
+          icon: '/icons/icon-192.png',
+        })
+      }
+    } else if (!nearGoal) {
+      nearGoalRef.current = false
+    }
+  }, [nearGoal])
+
+  // Celebrate an actual tier increase — skipped on the very first load, since
+  // that's just reporting existing rank, not a fresh promotion.
+  useEffect(() => {
+    const tier = getRank(rankPoints).tier
+    if (prevRankTierRef.current !== null && tier > prevRankTierRef.current) {
+      celebrateRankUp()
+      playRankUpSound()
+      if (navigator.vibrate) navigator.vibrate([80, 40, 80, 40, 160])
+    }
+    prevRankTierRef.current = tier
+  }, [rankPoints])
 
   async function handleAdd(amountMl: number) {
     if (!user || !profile || !viewDate || amountMl <= 0) return
@@ -173,7 +286,7 @@ export function HomePage() {
         setLastAdded({ clientId, amountMl })
         setTimeout(() => setLastAdded((prev) => (prev?.clientId === clientId ? null : prev)), 6000)
       }
-      setCustomAmount('')
+      setCustomAmount(null)
       setShowCustom(false)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'บันทึกไม่สำเร็จ')
@@ -197,9 +310,23 @@ export function HomePage() {
     }
   }
 
+  async function handleUseFreeze() {
+    if (!user || !brokenDay || freezing) return
+    setFreezing(true)
+    try {
+      await useStreakFreeze(user.id, brokenDay)
+      setFrozenDates((prev) => new Set(prev).add(brokenDay))
+      setFreezeAvailable(false)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'ใช้ตั๋วพักแรงค์ไม่สำเร็จ')
+    } finally {
+      setFreezing(false)
+    }
+  }
+
   function handleSavePreset() {
     if (!user) return
-    const amount = Number(customAmount)
+    const amount = customAmount ?? 0
     if (!presetName.trim() || !(amount > 0)) return
     const updated = [...presets, { id: uuidv4(), label: presetName.trim(), amountMl: amount }]
     setPresets(updated)
@@ -255,6 +382,50 @@ export function HomePage() {
     return <ErrorScreen message={error ?? 'โหลดข้อมูลไม่สำเร็จ'} onRetry={() => window.location.reload()} />
   }
 
+  // Patch in today's live total so the streak doesn't lag behind what's on screen —
+  // only while actually viewing today (viewing/backdating yesterday shouldn't touch it).
+  const displayTotals =
+    targetDay === 'today' && recentTotals.length > 0 && todayDate === recentTotals[recentTotals.length - 1].date
+      ? [
+          ...recentTotals.slice(0, -1),
+          {
+            date: todayDate,
+            totalMl,
+            effectiveMl: effectiveTotalMl,
+            effectiveGoalMl,
+            goalMet: effectiveTotalMl >= effectiveGoalMl,
+          },
+        ]
+      : recentTotals
+  const streak = calculateStreak(displayTotals, frozenDates)
+  // Only offer a freeze for a recent miss (within the last week) — an older gap
+  // isn't what "1 per week" is meant to patch over.
+  const brokenDay = findBrokenStreakDay(displayTotals, frozenDates)
+  const canOfferFreeze =
+    targetDay === 'today' &&
+    freezeAvailable &&
+    brokenDay !== null &&
+    todayDate !== null &&
+    (new Date(todayDate).getTime() - new Date(brokenDay).getTime()) / 86_400_000 <= 7
+
+  // A light, friendly nudge instead of silence when yesterday came up short —
+  // skipped if a freeze already protects it, since that's not really a miss anymore,
+  // or if the user already dismissed it for this same missed day.
+  const yesterdayDate = profile ? yesterdayInTimeZone(profile.timezone) : null
+  const yesterdayTotal = yesterdayDate ? recentTotals.find((t) => t.date === yesterdayDate) : undefined
+  const showMissQuip =
+    targetDay === 'today' &&
+    yesterdayTotal !== undefined &&
+    !yesterdayTotal.goalMet &&
+    !frozenDates.has(yesterdayDate!) &&
+    missQuipDismissedDate !== yesterdayDate
+
+  function handleDismissMissQuip() {
+    if (!user || !yesterdayDate) return
+    localStorage.setItem(`miss-quip-dismissed-${user.id}`, yesterdayDate)
+    setMissQuipDismissedDate(yesterdayDate)
+  }
+
   const quickAddOptions = [
     {
       key: 'half',
@@ -283,6 +454,23 @@ export function HomePage() {
   ]
 
   const widgetContent: Record<WidgetId, ReactNode> = {
+    streakFreeze:
+      canOfferFreeze && brokenDay ? (
+        <div className="flex w-full max-w-sm items-center justify-between gap-3 rounded-3xl bg-white p-4 shadow-md shadow-water-100">
+          <span className="flex items-center gap-2 text-xs text-slate-600">
+            <ShieldCheckIcon className="h-5 w-5 flex-shrink-0 text-water-500" />
+            พลาดไป {new Date(`${brokenDay}T00:00:00`).toLocaleDateString('th-TH', { day: 'numeric', month: 'short' })} —
+            ใช้ตั๋วพักแรงค์กู้ streak ได้นะ (1 ครั้ง/สัปดาห์)
+          </span>
+          <button
+            onClick={handleUseFreeze}
+            disabled={freezing}
+            className="flex-shrink-0 rounded-full bg-water-500 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-water-600 disabled:opacity-50"
+          >
+            ใช้เลย
+          </button>
+        </div>
+      ) : null,
     logs: (
       <div className="w-full max-w-sm">
         <h2 className="mb-2 text-sm font-medium text-slate-500">
@@ -323,13 +511,21 @@ export function HomePage() {
       <PacingChecklist
         reminderStart={profile.reminder_start}
         reminderEnd={profile.reminder_end}
-        dailyGoalMl={profile.daily_goal_ml}
-        totalMlSoFar={totalMl}
+        dailyGoalMl={effectiveGoalMl}
+        totalMlSoFar={effectiveTotalMl}
       />
     ),
     alcohol: alcoholEnabled ? (
       <AlcoholCard userId={user!.id} logDate={todayDate ?? todayInTimeZone(profile.timezone)} />
     ) : null,
+    otherDrinks: (
+      <OtherDrinksCard
+        userId={user!.id}
+        logDate={viewDate ?? todayInTimeZone(profile.timezone)}
+        compensationRatio={profile.caffeine_compensation_ratio}
+        onChange={() => viewDate && reloadOtherDrinksForDate(user!.id, viewDate)}
+      />
+    ),
     tip: todayDate ? (
       <div className="flex w-full max-w-sm items-start gap-3 rounded-3xl bg-white p-4 shadow-md shadow-water-100">
         <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-sun-300/40">
@@ -341,24 +537,20 @@ export function HomePage() {
         </div>
       </div>
     ) : null,
-    challenge: <ChallengeCard userId={user!.id} timezone={profile.timezone} dailyGoalMl={profile.daily_goal_ml} />,
+    challenge: (
+      <ChallengeCard
+        userId={user!.id}
+        timezone={profile.timezone}
+        dailyGoalMl={profile.daily_goal_ml}
+        compensationRatio={profile.caffeine_compensation_ratio}
+      />
+    ),
   }
 
   const visibleWidgetOrder = widgetOrder.filter(
     (id) => !hiddenWidgets.includes(id) && (id !== 'alcohol' || alcoholEnabled) && widgetContent[id] !== null,
   )
   const addableWidgets = hiddenWidgets.filter((id) => id !== 'alcohol')
-
-  // Patch in today's live total so the streak doesn't lag behind what's on screen —
-  // only while actually viewing today (viewing/backdating yesterday shouldn't touch it).
-  const displayTotals =
-    targetDay === 'today' && recentTotals.length > 0 && todayDate === recentTotals[recentTotals.length - 1].date
-      ? [
-          ...recentTotals.slice(0, -1),
-          { date: todayDate, totalMl, goalMet: totalMl >= profile.daily_goal_ml },
-        ]
-      : recentTotals
-  const streak = calculateStreak(displayTotals)
 
   return (
     <div className="flex min-h-full flex-col items-center gap-6 bg-water-50 px-6 py-10">
@@ -373,6 +565,27 @@ export function HomePage() {
         <div className="flex w-full max-w-sm items-center justify-center gap-2 rounded-full bg-gradient-to-r from-coral-400 to-coral-500 px-4 py-2.5 text-center text-sm font-medium text-white shadow-lg shadow-coral-500/30">
           <CheckBadgeIcon className="h-5 w-5" />
           ครบเป้าหมายวันนี้แล้ว เก่งมาก!
+        </div>
+      )}
+
+      {nearGoal && (
+        <div className="flex w-full max-w-sm items-center justify-center gap-2 rounded-full bg-sun-300/50 px-4 py-2.5 text-center text-sm font-medium text-water-700 shadow-sm">
+          <BoltIcon className="h-4 w-4 text-sun-400" />
+          เหลืออีกแค่ {remainingMl.toLocaleString()} ml เท่านั้น ใกล้ถึงแล้ว!
+        </div>
+      )}
+
+      {showMissQuip && todayDate && (
+        <div className="flex w-full max-w-sm items-center gap-2 rounded-2xl bg-coral-100 px-4 py-3 text-xs text-coral-600">
+          <FaceSmileIcon className="h-5 w-5 flex-shrink-0 text-coral-400" />
+          <span className="flex-1">{getMissDayQuip(todayDate)}</span>
+          <button
+            onClick={handleDismissMissQuip}
+            aria-label="ปิด"
+            className="flex-shrink-0 rounded-full p-1 text-coral-400 transition hover:bg-coral-200/60 hover:text-coral-600"
+          >
+            <XMarkIcon className="h-4 w-4" />
+          </button>
         </div>
       )}
 
@@ -394,8 +607,10 @@ export function HomePage() {
       <div className="relative">
         <WaveCircle
           percent={percent}
-          label={`${totalMl.toLocaleString()} / ${profile.daily_goal_ml.toLocaleString()} ml`}
-          sublabel={viewGoalReached ? 'ดื่มเกินเป้าหมายก็ได้ ดื่มต่อได้เลย' : `เหลืออีก ${Math.max(profile.daily_goal_ml - totalMl, 0)} ml`}
+          label={`${effectiveTotalMl.toLocaleString()} / ${effectiveGoalMl.toLocaleString()} ml`}
+          sublabel={
+            viewGoalReached ? 'ดื่มเกินเป้าหมายก็ได้ ดื่มต่อได้เลย' : `เหลืออีก ${Math.max(effectiveGoalMl - effectiveTotalMl, 0)} ml`
+          }
         />
         {streak > 0 && (
           <div className="absolute -left-2 -top-2 flex items-center gap-1 rounded-full bg-white px-3 py-1.5 shadow-md shadow-water-100">
@@ -403,6 +618,9 @@ export function HomePage() {
             <span className="font-display text-xs font-semibold text-coral-600">{streak} วัน</span>
           </div>
         )}
+        <div className="absolute -right-2 -top-2">
+          <RankBadge points={rankPoints} />
+        </div>
         <div className="absolute -right-2 -bottom-2 flex items-center gap-2">
           <button
             onClick={() => navigate('/history')}
@@ -487,18 +705,18 @@ export function HomePage() {
           <form
             onSubmit={(e) => {
               e.preventDefault()
-              handleAdd(Number(customAmount))
+              handleAdd(customAmount ?? 0)
             }}
             className="flex gap-2"
           >
-            <input
-              type="number"
+            <NumberField
+              value={customAmount}
+              nullable
               min={1}
-              required
+              max={5000}
               autoFocus
               placeholder="ปริมาณ (ml)"
-              value={customAmount}
-              onChange={(e) => setCustomAmount(e.target.value)}
+              onChange={setCustomAmount}
               className="flex-1 rounded-full border border-slate-200 px-4 py-2.5 outline-none transition focus:border-water-500 focus:ring-4 focus:ring-water-100"
             />
             <button
@@ -605,8 +823,8 @@ export function HomePage() {
       <DailySummaryModal
         open={showSummary}
         onClose={() => setShowSummary(false)}
-        totalMl={totalMl}
-        goalMl={profile.daily_goal_ml}
+        totalMl={effectiveTotalMl}
+        goalMl={effectiveGoalMl}
         reminderStart={profile.reminder_start}
         reminderEnd={profile.reminder_end}
       />

@@ -1,9 +1,10 @@
-import { useState, type FormEvent } from 'react'
+import { useState } from 'react'
 import { supabase } from '../../lib/supabase'
+import { Logo } from '../../components/Logo'
 
 function GoogleIcon() {
   return (
-    <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
+    <svg width="20" height="20" viewBox="0 0 18 18" aria-hidden="true">
       <path
         fill="#4285F4"
         d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8 2.72v2.26h2.9C16.66 14.2 17.64 11.94 17.64 9.2z"
@@ -22,41 +23,21 @@ function GoogleIcon() {
 }
 
 export function LoginPage() {
-  const [mode, setMode] = useState<'signin' | 'signup'>('signin')
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
-  const [info, setInfo] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
-
-  async function handleSubmit(e: FormEvent) {
-    e.preventDefault()
-    setError(null)
-    setInfo(null)
-    setSubmitting(true)
-
-    const { error: authError } =
-      mode === 'signin'
-        ? await supabase.auth.signInWithPassword({ email, password })
-        : await supabase.auth.signUp({ email, password })
-
-    setSubmitting(false)
-    if (authError) {
-      setError(authError.message)
-      return
-    }
-    if (mode === 'signup') {
-      setInfo('สมัครสำเร็จ กรุณาตรวจสอบอีเมลเพื่อยืนยันบัญชี')
-    }
-  }
 
   async function handleGoogleLogin() {
     setError(null)
+    setSubmitting(true)
     const { error: authError } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: { redirectTo: window.location.origin },
     })
-    if (authError) setError(authError.message)
+    // On success the browser redirects to Google, so we only land here on error.
+    if (authError) {
+      setError(authError.message)
+      setSubmitting(false)
+    }
   }
 
   return (
@@ -75,73 +56,35 @@ export function LoginPage() {
         style={{ background: 'radial-gradient(circle, var(--color-sun-400), transparent 70%)' }}
       />
 
-      <div className="relative w-full max-w-sm rounded-[28px] bg-white p-8 shadow-[0_30px_60px_-24px_rgba(11,79,115,0.35)]">
-        <span className="mb-4 inline-flex items-center gap-1 rounded-full bg-water-50 px-3 py-1 text-xs font-medium text-water-700">
-          💧 PWA ฟรี 100%
+      <div className="relative w-full max-w-sm rounded-[28px] bg-white p-8 text-center shadow-[0_30px_60px_-24px_rgba(11,79,115,0.35)]">
+        <span className="mb-5 inline-flex items-center gap-1.5 rounded-full bg-water-50 px-3 py-1 text-xs font-medium text-water-700">
+          <Logo className="h-3.5 w-3.5" /> PWA ฟรี 100%
         </span>
 
-        <h1 className="font-display mb-1 text-3xl font-semibold text-water-700">
+        <div className="mx-auto mb-5 flex h-20 w-20 items-center justify-center rounded-[26px] bg-gradient-to-br from-water-400 to-water-600 shadow-lg shadow-water-500/30">
+          <Logo white className="h-11 w-11" />
+        </div>
+
+        <h1 className="font-display mb-2 text-3xl font-semibold text-water-700">
           Drink <span className="bg-gradient-to-r from-water-500 to-water-700 bg-clip-text text-transparent">Water</span>
         </h1>
-        <p className="mb-6 text-sm text-slate-500">
-          {mode === 'signin'
-            ? 'เข้าสู่ระบบเพื่อเริ่มติดตามการดื่มน้ำ'
-            : 'ตั้งเป้าหมายที่ใช่ แล้วมาสร้างนิสัยดื่มน้ำไปด้วยกัน'}
+        <p className="mb-8 text-sm text-slate-500">
+          ตั้งเป้าหมายที่ใช่ แล้วมาสร้างนิสัยดื่มน้ำไปด้วยกัน
         </p>
 
-        <form onSubmit={handleSubmit} className="flex flex-col gap-3">
-          <input
-            type="email"
-            required
-            placeholder="อีเมล"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className="rounded-2xl border border-slate-200 px-4 py-3 outline-none transition focus:border-water-500 focus:ring-4 focus:ring-water-100"
-          />
-          <input
-            type="password"
-            required
-            minLength={6}
-            placeholder="รหัสผ่าน"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="rounded-2xl border border-slate-200 px-4 py-3 outline-none transition focus:border-water-500 focus:ring-4 focus:ring-water-100"
-          />
-
-          {error && <p className="text-sm text-coral-500">{error}</p>}
-          {info && <p className="text-sm text-water-600">{info}</p>}
-
-          <button
-            type="submit"
-            disabled={submitting}
-            className="mt-1 rounded-full bg-gradient-to-r from-water-500 to-water-600 py-3 font-medium text-white shadow-lg shadow-water-500/30 transition hover:-translate-y-0.5 hover:shadow-xl hover:shadow-water-500/40 disabled:translate-y-0 disabled:opacity-50 disabled:shadow-none"
-          >
-            {mode === 'signin' ? 'เข้าสู่ระบบ' : 'สมัครสมาชิก'}
-          </button>
-        </form>
-
-        <div className="my-5 flex items-center gap-3 text-xs text-slate-400">
-          <span className="h-px flex-1 bg-slate-200" />
-          หรือ
-          <span className="h-px flex-1 bg-slate-200" />
-        </div>
+        {error && <p className="mb-4 text-sm text-coral-500">{error}</p>}
 
         <button
           onClick={handleGoogleLogin}
-          className="flex w-full items-center justify-center gap-2 rounded-full border border-slate-200 py-3 font-medium text-slate-700 transition hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md"
+          disabled={submitting}
+          className="flex w-full items-center justify-center gap-3 rounded-full border border-slate-200 py-3.5 font-medium text-slate-700 transition hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md disabled:translate-y-0 disabled:opacity-50 disabled:shadow-none"
         >
           <GoogleIcon />
-          เข้าสู่ระบบด้วย Google
+          {submitting ? 'กำลังเข้าสู่ระบบ...' : 'เข้าสู่ระบบด้วย Google'}
         </button>
 
-        <p className="mt-6 text-center text-sm text-slate-500">
-          {mode === 'signin' ? 'ยังไม่มีบัญชี?' : 'มีบัญชีอยู่แล้ว?'}{' '}
-          <button
-            onClick={() => setMode(mode === 'signin' ? 'signup' : 'signin')}
-            className="font-medium text-water-600 hover:underline"
-          >
-            {mode === 'signin' ? 'สมัครสมาชิก' : 'เข้าสู่ระบบ'}
-          </button>
+        <p className="mt-6 text-xs text-slate-400">
+          เข้าสู่ระบบด้วยบัญชี Google ของคุณ ปลอดภัยและไม่ต้องจำรหัสผ่าน
         </p>
       </div>
     </div>

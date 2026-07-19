@@ -14,7 +14,7 @@ export function PacingChecklist({
   reminderEnd,
   dailyGoalMl,
   totalMlSoFar,
-  slotCount = 4,
+  slotCount = 6,
 }: PacingChecklistProps) {
   const slots = buildPacingSlots(reminderStart, reminderEnd, dailyGoalMl, slotCount, totalMlSoFar)
   const nextIndex = slots.findIndex((slot) => !slot.done)
@@ -35,6 +35,9 @@ export function PacingChecklist({
         <div className="absolute left-[19px] top-3 bottom-3 w-0.5 bg-slate-100" />
         {slots.map((slot, i) => {
           const isNext = i === nextIndex
+          // Per-checkpoint chunk = how much to drink between this slot and the last,
+          // which is far easier to read than the running cumulative total.
+          const chunkMl = Math.max(0, slot.targetMl - (i > 0 ? slots[i - 1].targetMl : 0))
           return (
             <li key={slot.label} className="relative flex items-center gap-3">
               <span
@@ -48,14 +51,23 @@ export function PacingChecklist({
               >
                 {slot.done && <CheckIcon className="h-4 w-4" />}
               </span>
-              <div className="flex flex-1 items-baseline justify-between gap-2">
-                <span className={`text-sm ${slot.done ? 'text-slate-400' : isNext ? 'font-semibold text-water-700' : 'text-slate-600'}`}>
-                  {slot.time} · {slot.label}
-                </span>
+              <div className="flex flex-1 items-center justify-between gap-2">
+                <div className="flex flex-col">
+                  <span className={`text-sm ${slot.done ? 'text-slate-400' : isNext ? 'font-semibold text-water-700' : 'text-slate-600'}`}>
+                    {slot.time} น.
+                  </span>
+                  <span className="text-[11px] text-slate-400">รวม {slot.targetMl.toLocaleString()} ml</span>
+                </div>
                 <span
-                  className={`text-sm ${slot.done ? 'text-slate-300' : isNext ? 'font-semibold text-water-600' : 'text-slate-400'}`}
+                  className={`rounded-full px-2.5 py-1 text-sm font-semibold ${
+                    slot.done
+                      ? 'bg-mint-100 text-mint-600'
+                      : isNext
+                        ? 'bg-water-50 text-water-600'
+                        : 'bg-slate-50 text-slate-400'
+                  }`}
                 >
-                  {slot.targetMl.toLocaleString()} ml
+                  +{chunkMl.toLocaleString()} ml
                 </span>
               </div>
             </li>

@@ -20,6 +20,7 @@ export interface Profile {
   created_at: string
   daily_summary_enabled: boolean
   last_daily_summary_sent_date: string | null
+  caffeine_compensation_ratio: number
 }
 
 export async function fetchProfile(userId: string): Promise<Profile> {
