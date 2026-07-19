@@ -1,13 +1,22 @@
-export type WidgetId = 'pacing' | 'alcohol' | 'otherDrinks' | 'tip' | 'logs' | 'challenge'
+export type WidgetId = 'streakFreeze' | 'pacing' | 'alcohol' | 'otherDrinks' | 'tip' | 'logs' | 'challenge'
 
-export const DEFAULT_WIDGET_ORDER: WidgetId[] = ['logs', 'otherDrinks', 'pacing', 'alcohol', 'tip', 'challenge']
+export const DEFAULT_WIDGET_ORDER: WidgetId[] = [
+  'streakFreeze',
+  'logs',
+  'otherDrinks',
+  'pacing',
+  'alcohol',
+  'tip',
+  'challenge',
+]
 
 // New widgets start hidden until the user opts to add them from the widget picker.
 export const DEFAULT_HIDDEN_WIDGETS: WidgetId[] = ['challenge']
 
-const KNOWN_IDS: WidgetId[] = ['pacing', 'alcohol', 'otherDrinks', 'tip', 'logs', 'challenge']
+const KNOWN_IDS: WidgetId[] = ['streakFreeze', 'pacing', 'alcohol', 'otherDrinks', 'tip', 'logs', 'challenge']
 
 export const WIDGET_LABELS: Record<WidgetId, string> = {
+  streakFreeze: 'ตั๋วพักแรงค์',
   logs: 'รายการดื่มน้ำ',
   pacing: 'ตารางดื่มน้ำ',
   alcohol: 'แอลกอฮอล์',

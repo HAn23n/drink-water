@@ -11,8 +11,8 @@ describe('widgetLayout', () => {
   })
 
   it('round-trips a saved order', () => {
-    saveWidgetOrder('user-1', ['alcohol', 'tip', 'pacing', 'logs', 'otherDrinks', 'challenge'])
-    expect(getWidgetOrder('user-1')).toEqual(['alcohol', 'tip', 'pacing', 'logs', 'otherDrinks', 'challenge'])
+    saveWidgetOrder('user-1', ['streakFreeze', 'alcohol', 'tip', 'pacing', 'logs', 'otherDrinks', 'challenge'])
+    expect(getWidgetOrder('user-1')).toEqual(['streakFreeze', 'alcohol', 'tip', 'pacing', 'logs', 'otherDrinks', 'challenge'])
   })
 
   it('falls back to the default when stored JSON is invalid', () => {
@@ -22,16 +22,16 @@ describe('widgetLayout', () => {
 
   it('appends widgets missing from a stored order', () => {
     localStorage.setItem('widget-order-user-1', JSON.stringify(['alcohol', 'logs']))
-    expect(getWidgetOrder('user-1')).toEqual(['alcohol', 'logs', 'pacing', 'otherDrinks', 'tip', 'challenge'])
+    expect(getWidgetOrder('user-1')).toEqual(['alcohol', 'logs', 'streakFreeze', 'pacing', 'otherDrinks', 'tip', 'challenge'])
   })
 
   it('drops unknown ids from a stored order', () => {
     localStorage.setItem('widget-order-user-1', JSON.stringify(['alcohol', 'mystery', 'logs']))
-    expect(getWidgetOrder('user-1')).toEqual(['alcohol', 'logs', 'pacing', 'otherDrinks', 'tip', 'challenge'])
+    expect(getWidgetOrder('user-1')).toEqual(['alcohol', 'logs', 'streakFreeze', 'pacing', 'otherDrinks', 'tip', 'challenge'])
   })
 
   it('keeps separate users isolated', () => {
-    saveWidgetOrder('user-1', ['tip', 'alcohol', 'pacing', 'logs', 'otherDrinks', 'challenge'])
+    saveWidgetOrder('user-1', ['tip', 'alcohol', 'pacing', 'logs', 'otherDrinks', 'streakFreeze', 'challenge'])
     expect(getWidgetOrder('user-2')).toEqual(DEFAULT_WIDGET_ORDER)
   })
 })

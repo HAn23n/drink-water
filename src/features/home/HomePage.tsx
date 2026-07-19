@@ -372,6 +372,39 @@ export function HomePage() {
     return <ErrorScreen message={error ?? 'โหลดข้อมูลไม่สำเร็จ'} onRetry={() => window.location.reload()} />
   }
 
+  // Patch in today's live total so the streak doesn't lag behind what's on screen —
+  // only while actually viewing today (viewing/backdating yesterday shouldn't touch it).
+  const displayTotals =
+    targetDay === 'today' && recentTotals.length > 0 && todayDate === recentTotals[recentTotals.length - 1].date
+      ? [
+          ...recentTotals.slice(0, -1),
+          {
+            date: todayDate,
+            totalMl,
+            effectiveMl: effectiveTotalMl,
+            effectiveGoalMl,
+            goalMet: effectiveTotalMl >= effectiveGoalMl,
+          },
+        ]
+      : recentTotals
+  const streak = calculateStreak(displayTotals, frozenDates)
+  // Only offer a freeze for a recent miss (within the last week) — an older gap
+  // isn't what "1 per week" is meant to patch over.
+  const brokenDay = findBrokenStreakDay(displayTotals, frozenDates)
+  const canOfferFreeze =
+    targetDay === 'today' &&
+    freezeAvailable &&
+    brokenDay !== null &&
+    todayDate !== null &&
+    (new Date(todayDate).getTime() - new Date(brokenDay).getTime()) / 86_400_000 <= 7
+
+  // A light, friendly nudge instead of silence when yesterday came up short —
+  // skipped if a freeze already protects it, since that's not really a miss anymore.
+  const yesterdayDate = profile ? yesterdayInTimeZone(profile.timezone) : null
+  const yesterdayTotal = yesterdayDate ? recentTotals.find((t) => t.date === yesterdayDate) : undefined
+  const showMissQuip =
+    targetDay === 'today' && yesterdayTotal !== undefined && !yesterdayTotal.goalMet && !frozenDates.has(yesterdayDate!)
+
   const quickAddOptions = [
     {
       key: 'half',
@@ -400,6 +433,23 @@ export function HomePage() {
   ]
 
   const widgetContent: Record<WidgetId, ReactNode> = {
+    streakFreeze:
+      canOfferFreeze && brokenDay ? (
+        <div className="flex w-full max-w-sm items-center justify-between gap-3 rounded-3xl bg-white p-4 shadow-md shadow-water-100">
+          <span className="flex items-center gap-2 text-xs text-slate-600">
+            <ShieldCheckIcon className="h-5 w-5 flex-shrink-0 text-water-500" />
+            พลาดไป {new Date(`${brokenDay}T00:00:00`).toLocaleDateString('th-TH', { day: 'numeric', month: 'short' })} —
+            ใช้ตั๋วพักแรงค์กู้ streak ได้นะ (1 ครั้ง/สัปดาห์)
+          </span>
+          <button
+            onClick={handleUseFreeze}
+            disabled={freezing}
+            className="flex-shrink-0 rounded-full bg-water-500 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-water-600 disabled:opacity-50"
+          >
+            ใช้เลย
+          </button>
+        </div>
+      ) : null,
     logs: (
       <div className="w-full max-w-sm">
         <h2 className="mb-2 text-sm font-medium text-slate-500">
@@ -481,39 +531,6 @@ export function HomePage() {
   )
   const addableWidgets = hiddenWidgets.filter((id) => id !== 'alcohol')
 
-  // Patch in today's live total so the streak doesn't lag behind what's on screen —
-  // only while actually viewing today (viewing/backdating yesterday shouldn't touch it).
-  const displayTotals =
-    targetDay === 'today' && recentTotals.length > 0 && todayDate === recentTotals[recentTotals.length - 1].date
-      ? [
-          ...recentTotals.slice(0, -1),
-          {
-            date: todayDate,
-            totalMl,
-            effectiveMl: effectiveTotalMl,
-            effectiveGoalMl,
-            goalMet: effectiveTotalMl >= effectiveGoalMl,
-          },
-        ]
-      : recentTotals
-  const streak = calculateStreak(displayTotals, frozenDates)
-  // Only offer a freeze for a recent miss (within the last week) — an older gap
-  // isn't what "1 per week" is meant to patch over.
-  const brokenDay = findBrokenStreakDay(displayTotals, frozenDates)
-  const canOfferFreeze =
-    targetDay === 'today' &&
-    freezeAvailable &&
-    brokenDay !== null &&
-    todayDate !== null &&
-    (new Date(todayDate).getTime() - new Date(brokenDay).getTime()) / 86_400_000 <= 7
-
-  // A light, friendly nudge instead of silence when yesterday came up short —
-  // skipped if a freeze already protects it, since that's not really a miss anymore.
-  const yesterdayDate = profile ? yesterdayInTimeZone(profile.timezone) : null
-  const yesterdayTotal = yesterdayDate ? recentTotals.find((t) => t.date === yesterdayDate) : undefined
-  const showMissQuip =
-    targetDay === 'today' && yesterdayTotal !== undefined && !yesterdayTotal.goalMet && !frozenDates.has(yesterdayDate!)
-
   return (
     <div className="flex min-h-full flex-col items-center gap-6 bg-water-50 px-6 py-10">
       {error && <p className="text-sm text-coral-500">{error}</p>}
@@ -534,23 +551,6 @@ export function HomePage() {
         <div className="flex w-full max-w-sm items-center justify-center gap-2 rounded-full bg-sun-300/50 px-4 py-2.5 text-center text-sm font-medium text-water-700 shadow-sm">
           <BoltIcon className="h-4 w-4 text-sun-400" />
           เหลืออีกแค่ {remainingMl.toLocaleString()} ml เท่านั้น ใกล้ถึงแล้ว!
-        </div>
-      )}
-
-      {canOfferFreeze && brokenDay && (
-        <div className="flex w-full max-w-sm items-center justify-between gap-3 rounded-2xl bg-water-100 px-4 py-3 text-water-700 shadow-sm">
-          <span className="flex items-center gap-2 text-xs">
-            <ShieldCheckIcon className="h-5 w-5 flex-shrink-0 text-water-500" />
-            พลาดไป {new Date(`${brokenDay}T00:00:00`).toLocaleDateString('th-TH', { day: 'numeric', month: 'short' })} —
-            ใช้ตั๋วพักแรงค์กู้ streak ได้นะ (1 ครั้ง/สัปดาห์)
-          </span>
-          <button
-            onClick={handleUseFreeze}
-            disabled={freezing}
-            className="flex-shrink-0 rounded-full bg-water-500 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-water-600 disabled:opacity-50"
-          >
-            ใช้เลย
-          </button>
         </div>
       )}
 
