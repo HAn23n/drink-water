@@ -93,6 +93,7 @@ export function HomePage() {
   const [frozenDates, setFrozenDates] = useState<Set<string>>(new Set())
   const [freezeAvailable, setFreezeAvailable] = useState(false)
   const [freezing, setFreezing] = useState(false)
+  const [missQuipDismissedDate, setMissQuipDismissedDate] = useState<string | null>(null)
   const celebratedRef = useRef(false)
   const nearGoalRef = useRef(false)
   const prevRankTierRef = useRef<number | null>(null)
@@ -109,6 +110,10 @@ export function HomePage() {
     const rows = await fetchOtherDrinkLogsForDate(userId, date)
     setOtherDrinkTotal(rows.reduce((sum, row) => sum + row.amount_ml, 0))
   }, [])
+
+  useEffect(() => {
+    if (user) setMissQuipDismissedDate(localStorage.getItem(`miss-quip-dismissed-${user.id}`))
+  }, [user])
 
   useEffect(() => {
     if (!user) return
@@ -399,11 +404,22 @@ export function HomePage() {
     (new Date(todayDate).getTime() - new Date(brokenDay).getTime()) / 86_400_000 <= 7
 
   // A light, friendly nudge instead of silence when yesterday came up short —
-  // skipped if a freeze already protects it, since that's not really a miss anymore.
+  // skipped if a freeze already protects it, since that's not really a miss anymore,
+  // or if the user already dismissed it for this same missed day.
   const yesterdayDate = profile ? yesterdayInTimeZone(profile.timezone) : null
   const yesterdayTotal = yesterdayDate ? recentTotals.find((t) => t.date === yesterdayDate) : undefined
   const showMissQuip =
-    targetDay === 'today' && yesterdayTotal !== undefined && !yesterdayTotal.goalMet && !frozenDates.has(yesterdayDate!)
+    targetDay === 'today' &&
+    yesterdayTotal !== undefined &&
+    !yesterdayTotal.goalMet &&
+    !frozenDates.has(yesterdayDate!) &&
+    missQuipDismissedDate !== yesterdayDate
+
+  function handleDismissMissQuip() {
+    if (!user || !yesterdayDate) return
+    localStorage.setItem(`miss-quip-dismissed-${user.id}`, yesterdayDate)
+    setMissQuipDismissedDate(yesterdayDate)
+  }
 
   const quickAddOptions = [
     {
@@ -557,7 +573,14 @@ export function HomePage() {
       {showMissQuip && todayDate && (
         <div className="flex w-full max-w-sm items-center gap-2 rounded-2xl bg-coral-100 px-4 py-3 text-xs text-coral-600">
           <FaceSmileIcon className="h-5 w-5 flex-shrink-0 text-coral-400" />
-          {getMissDayQuip(todayDate)}
+          <span className="flex-1">{getMissDayQuip(todayDate)}</span>
+          <button
+            onClick={handleDismissMissQuip}
+            aria-label="ปิด"
+            className="flex-shrink-0 rounded-full p-1 text-coral-400 transition hover:bg-coral-200/60 hover:text-coral-600"
+          >
+            <XMarkIcon className="h-4 w-4" />
+          </button>
         </div>
       )}
 
