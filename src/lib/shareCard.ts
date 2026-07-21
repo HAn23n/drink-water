@@ -6,6 +6,26 @@ export interface ShareCardData {
   streak: number
 }
 
+/** Shrinks the font (down to `minSize`) until `text` fits within `maxWidth`,
+ *  leaves `ctx.font` set to the chosen size, and returns it — long Thai
+ *  strings (display names, rank names) otherwise overflow a fixed size. */
+function fitTextFont(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  maxWidth: number,
+  maxSize: number,
+  minSize: number,
+  font: (size: number) => string,
+): number {
+  let size = maxSize
+  ctx.font = font(size)
+  while (ctx.measureText(text).width > maxWidth && size > minSize) {
+    size -= 2
+    ctx.font = font(size)
+  }
+  return size
+}
+
 function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
   ctx.beginPath()
   ctx.moveTo(x + r, y)
@@ -90,8 +110,9 @@ async function generateShareCardBlob(data: ShareCardData): Promise<Blob> {
 
   // Name + subtitle
   ctx.fillStyle = '#ffffff'
-  ctx.font = "700 60px Kanit, 'IBM Plex Sans Thai', sans-serif"
-  ctx.fillText(data.displayName || 'Drink Water', W / 2, 232)
+  const nameText = data.displayName || 'Drink Water'
+  fitTextFont(ctx, nameText, W - 160, 60, 32, (size) => `700 ${size}px Kanit, 'IBM Plex Sans Thai', sans-serif`)
+  ctx.fillText(nameText, W / 2, 232)
   ctx.font = "500 34px 'IBM Plex Sans Thai', sans-serif"
   ctx.fillStyle = 'rgba(255,255,255,0.82)'
   ctx.fillText('สรุปการดื่มน้ำวันนี้', W / 2, 286)
@@ -271,19 +292,21 @@ async function generateRankCardBlob(data: RankCardData): Promise<Blob> {
   spacing.letterSpacing = '0px'
 
   ctx.fillStyle = '#ffffff'
-  ctx.font = "700 52px Kanit, 'IBM Plex Sans Thai', sans-serif"
-  ctx.fillText(data.displayName || 'Drink Water', W / 2, 226)
+  const nameText = data.displayName || 'Drink Water'
+  fitTextFont(ctx, nameText, W - 160, 52, 28, (size) => `700 ${size}px Kanit, 'IBM Plex Sans Thai', sans-serif`)
+  ctx.fillText(nameText, W / 2, 226)
   ctx.font = "500 32px 'IBM Plex Sans Thai', sans-serif"
   ctx.fillStyle = 'rgba(255,255,255,0.82)'
   ctx.fillText(`แรงค์ ${data.tier}/${data.totalTiers}`, W / 2, 276)
 
-  // Hero rank name — sized down a step from a % so long Thai names still fit.
+  // Hero rank name — shrinks to fit so longer Thai names (e.g. "มือใหม่หัดจิบ")
+  // never run off the canvas edge.
   ctx.save()
   ctx.shadowColor = 'rgba(3,20,60,0.35)'
   ctx.shadowBlur = 36
   ctx.shadowOffsetY = 14
   ctx.fillStyle = '#ffffff'
-  ctx.font = "800 108px Kanit, 'IBM Plex Sans Thai', sans-serif"
+  fitTextFont(ctx, data.rankName, W - 160, 108, 56, (size) => `800 ${size}px Kanit, 'IBM Plex Sans Thai', sans-serif`)
   ctx.fillText(data.rankName, W / 2, 480)
   ctx.restore()
 
